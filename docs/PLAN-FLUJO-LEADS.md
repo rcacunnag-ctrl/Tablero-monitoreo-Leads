@@ -142,3 +142,10 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - **Ajustes al Intake `server.py`** (respaldo `server.py.bak-2026-10-10`): busca los informes en `Informes Tier 2/` y el contexto llega a todas las fases. Además, `iniciar_local.ps1` pasa el `--plugin-dir` con los skills de la app.
   - **Pruebas:** 28/28 en Linux y prueba aislada del Intake. El Intake arrancó por WMI y respondió `/health`. El puente sin órdenes termina limpio. Falta la primera corrida real, que consume tokens y espera la orden del usuario.
   - En el servidor quedó `TIER2_SKILL_ENABLED=true`. Respaldos: `.env.bak-fased` y `data.bak-*-fased`.
+- 2026-10-11: falló el informe Tier 1 de 10303 Oliver Ln. Claude delegó el trabajo a un subagente en segundo plano y cerró la sesión; `claude -p` lo cortó a los 600 s sin entregables. Corrección en `tier1-runner.ps1`:
+  - `--disallowedTools Agent` y una instrucción de hacer todo en la misma sesión;
+  - `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`, para esperar las tareas en segundo plano en vez de cortarlas;
+  - lectura del JSON aunque el CLI imprima avisos antes;
+  - "listo" solo si existe un dashboard HTML nuevo en `Informes Tier 1`.
+  - Reencolado y verificado: listo en 18 minutos (122 turnos), dashboard de 2.1 MB subido al panel.
+
