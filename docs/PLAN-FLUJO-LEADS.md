@@ -149,3 +149,4 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - "listo" solo si existe un dashboard HTML nuevo en `Informes Tier 1`.
   - Reencolado y verificado: listo en 18 minutos (122 turnos), dashboard de 2.1 MB subido al panel.
 
+- 2026-10-11: los avisos al grupo pasan a **dos resúmenes al día, 11:00 y 17:30 hora de Colombia** (`NOTIF_HORARIOS`, `NOTIF_TZ=America/Bogota`). Solo se envían si hay novedades. Si a esa hora no se pudo enviar, se reintenta durante la hora siguiente; después, lo pendiente pasa al siguiente horario. Pruebas: 28/28 en Linux.

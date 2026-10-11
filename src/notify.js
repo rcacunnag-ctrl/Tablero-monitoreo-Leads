@@ -1,6 +1,7 @@
 // Avisos al grupo de WhatsApp NOTIF_GRUPO con el mismo número del monitor. Para no parecer un bot:
-// un solo mensaje de resumen cada NOTIF_INTERVALO_MIN minutos (120), solo si hay novedades y solo
-// en horario NOTIF_HORAS (hora de Florida). La cola se guarda en data/notificaciones.json y se
+// solo dos resúmenes al día, en los horarios de NOTIF_HORARIOS (11:00 y 17:30, hora de Colombia),
+// y solo si hay novedades. Si a esa hora el servidor no pudo enviar, lo intenta durante la hora siguiente;
+// después, lo pendiente pasa al siguiente horario. La cola se guarda en data/notificaciones.json y se
 // resuelve contra los leads al enviar (un lead descartado o con la alerta ya resuelta no sale).
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -86,29 +87,40 @@ export function armarResumen(eventos, leads, ahora = new Date()) {
     partes.push([`*${titulo} (${lineas.length})*`, ...lineas.slice(0, MAX_POR_SECCION), ...extra].join('\n'));
   }
   if (!partes.length) return '';
-  const hora = ahora.toLocaleString('es-US', { timeZone: config.timeZone, dateStyle: 'short', timeStyle: 'short' });
+  const hora = ahora.toLocaleString('es-CO', { timeZone: config.notifTz, dateStyle: 'short', timeStyle: 'short' });
   return [`*Monitor de Propiedades* · resumen ${hora}`, ...partes].join('\n\n');
 }
 
-function enHorario(ahora) {
-  const [desde, hasta] = config.notifHoras.split('-').map(Number);
-  const h = Number(ahora.toLocaleString('en-US', { timeZone: config.timeZone, hour: 'numeric', hourCycle: 'h23' }));
-  return h >= desde && h < hasta;
+const VENTANA_MIN = 60;
+
+/** Turno vigente ("AAAA-MM-DD HH:MM" en NOTIF_TZ): el último horario de hoy ya alcanzado hace menos de 60 min. */
+export function turnoVigente(ahora) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: config.notifTz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(ahora).map((x) => [x.type, x.value]));
+  const min = Number(p.hour) * 60 + Number(p.minute);
+  const turno = config.notifHorarios
+    .map((h) => [h, h.split(':').reduce((a, b) => Number(a) * 60 + Number(b))])
+    .filter(([, m]) => min >= m && min - m < VENTANA_MIN)
+    .at(-1);
+  return turno ? `${p.year}-${p.month}-${p.day} ${turno[0]}` : null;
 }
 
-/** Envía el resumen si toca (intervalo, horario y novedades). Si el envío falla, la cola se conserva. */
+/** Envía el resumen si toca (horario del día no enviado y novedades). Si el envío falla, la cola se conserva. */
 export function revisarEnvio({ ahora = new Date(), enviar = enviarFn } = {}) {
   return serial(async () => {
     if (!config.notifEnabled) return { enviado: false, motivo: 'desactivado' };
     const c = await cargar();
     if (!c.pendientes.length) return { enviado: false, motivo: 'sin novedades' };
     if (!enviar) return { enviado: false, motivo: 'sin conexión' };
-    if (c.ultimo_envio && ahora - new Date(c.ultimo_envio) < config.notifIntervaloMin * 60000) return { enviado: false, motivo: 'intervalo' };
-    if (!enHorario(ahora)) return { enviado: false, motivo: 'fuera de horario' };
+    const turno = turnoVigente(ahora);
+    if (!turno) return { enviado: false, motivo: 'fuera de horario' };
+    if (c.ultimo_turno === turno) return { enviado: false, motivo: 'turno ya enviado' };
     const texto = armarResumen(c.pendientes, await listLeads(), ahora);
     if (texto) await enviar(texto);
     const n = c.pendientes.length;
     c.pendientes = [];
+    c.ultimo_turno = turno;
     if (texto) c.ultimo_envio = ahora.toISOString();
     await guardar();
     return { enviado: Boolean(texto), eventos: n };

@@ -42,11 +42,11 @@ export const config = {
   tier2Counties: list(process.env.TIER2_COUNTIES || 'Broward,Palm Beach'),
   timeZone: process.env.TZ_NEGOCIO || 'America/New_York',
 
-  // Avisos por WhatsApp (mismo número) al grupo NOTIF_GRUPO: un resumen cada NOTIF_INTERVALO_MIN, en NOTIF_HORAS
+  // Avisos por WhatsApp (mismo número) al grupo NOTIF_GRUPO: un resumen en cada horario de NOTIF_HORARIOS (hora de NOTIF_TZ)
   notifEnabled: bool(process.env.NOTIF_ENABLED, false),
   notifGrupo: (process.env.NOTIF_GRUPO || 'Grupo prueba Wholesaler').trim(),
-  notifIntervaloMin: Number(process.env.NOTIF_INTERVALO_MIN || 120),
-  notifHoras: process.env.NOTIF_HORAS || '8-21',
+  notifHorarios: list(process.env.NOTIF_HORARIOS || '11:00,17:30').filter((h) => /^\d{1,2}:\d{2}$/.test(h)),
+  notifTz: process.env.NOTIF_TZ || 'America/Bogota',
 
   dirs: {
     inbox: path.join(DATA_DIR, 'inbox'),

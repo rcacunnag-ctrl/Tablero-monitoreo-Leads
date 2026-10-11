@@ -510,7 +510,7 @@ test('informes: subir, servir aislado, vista pública y borrar al descartar', as
   }
 });
 
-test('avisos por WhatsApp: resumen cada 2 h, en horario, solo novedades vigentes', async () => {
+test('avisos por WhatsApp: resumen a las 11:00 y 17:30 (Colombia), solo novedades vigentes', async () => {
   const { config } = await import('../src/config.js');
   const notify = await import('../src/notify.js');
   config.notifEnabled = true;
@@ -526,10 +526,11 @@ test('avisos por WhatsApp: resumen cada 2 h, en horario, solo novedades vigentes
 
     const enviados = [];
     const enviar = async (t) => enviados.push(t);
-    // 3 a. m. en Florida: fuera de horario
-    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T07:00:00Z'), enviar })).motivo, 'fuera de horario');
-    // 10 a. m. en Florida: envía un solo mensaje
-    const r = await notify.revisarEnvio({ ahora: new Date('2026-10-10T14:00:00Z'), enviar });
+    // 10:00 en Colombia (UTC-5): todavía no es horario
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T15:00:00Z'), enviar })).motivo, 'fuera de horario');
+    assert.equal(notify.turnoVigente(new Date('2026-10-10T16:05:00Z')), '2026-10-10 11:00');
+    // 11:05 en Colombia: envía un solo mensaje
+    const r = await notify.revisarEnvio({ ahora: new Date('2026-10-10T16:05:00Z'), enviar });
     assert.equal(r.enviado, true);
     assert.equal(enviados.length, 1);
     const t = enviados[0];
@@ -539,14 +540,19 @@ test('avisos por WhatsApp: resumen cada 2 h, en horario, solo novedades vigentes
     assert.match(t, /Informes Tier 1 listos \(1\)\*\n• 11 Auto Ave, Jupiter — Advance — score 72\/100/);
     assert.ok(!t.includes('12 Ok St'));
 
-    // Antes de 2 h no vuelve a enviar aunque haya novedades; si falla, la cola se conserva
+    // El mismo turno no se repite; entre turnos no se envía; si falla, la cola se conserva para el siguiente intento
     await notify.encolar('alerta', conAlerta.id);
-    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T15:00:00Z'), enviar })).motivo, 'intervalo');
-    await assert.rejects(notify.revisarEnvio({ ahora: new Date('2026-10-10T16:30:00Z'), enviar: async () => { throw new Error('sin red'); } }), /sin red/);
-    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T16:30:00Z'), enviar })).enviado, true);
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T16:40:00Z'), enviar })).motivo, 'turno ya enviado');
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T19:00:00Z'), enviar })).motivo, 'fuera de horario');
+    await assert.rejects(notify.revisarEnvio({ ahora: new Date('2026-10-10T22:35:00Z'), enviar: async () => { throw new Error('sin red'); } }), /sin red/);
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T22:40:00Z'), enviar })).enviado, true); // 17:40
     assert.equal(enviados.length, 2);
+    // Pasada la hora de gracia (18:45) ya no envía: espera al horario de las 11:00 del día siguiente
+    await notify.encolar('alerta', conAlerta.id);
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T23:45:00Z'), enviar })).motivo, 'fuera de horario');
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-11T16:00:00Z'), enviar })).enviado, true);
     // Sin novedades no se envía nada
-    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-10T20:00:00Z'), enviar })).motivo, 'sin novedades');
+    assert.equal((await notify.revisarEnvio({ ahora: new Date('2026-10-11T22:30:00Z'), enviar })).motivo, 'sin novedades');
   } finally {
     config.notifEnabled = false;
   }
