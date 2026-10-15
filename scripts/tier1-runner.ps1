@@ -191,10 +191,14 @@ RESULTADO: {"estado":"error","detalle":"<cause in one line>"}
     # la sesión terminó y `claude -p` lo cortó a los 600 s sin entregables. Si quedara alguna tarea en segundo
     # plano, se espera a que termine en vez de cortarla (igual que el Intake Service).
     $env:CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS = '0'
+    # Modelo y esfuerzo de este PC: los define el servidor (TIER1_MODELO_POR_PC) y llegan en la orden
+    $modelo = @()
+    if ($job.modelo) { $modelo += '--model', [string]$job.modelo }
+    if ($job.esfuerzo) { $modelo += '--effort', [string]$job.esfuerzo }
     try {
       $raw = $prompt | & claude -p --plugin-dir $plugin --output-format json --permission-mode acceptEdits `
         --allowedTools Bash PowerShell Read Write Edit Glob Grep WebFetch WebSearch Skill TodoWrite `
-        --disallowedTools Agent 2>&1 | Out-String
+        --disallowedTools Agent @modelo 2>&1 | Out-String
     } finally { Pop-Location }
     $min = [math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
     # La salida puede traer avisos del CLI antes del JSON: se toma la última línea que es un objeto JSON
@@ -202,8 +206,17 @@ RESULTADO: {"estado":"error","detalle":"<cause in one line>"}
     $json = $raw -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -Last 1
     if ($json) { try { $res = $json | ConvertFrom-Json } catch { } }
     $texto = if ($res) { [string]$res.result } else { $raw }
-    if ($res) { Log ("uso {0}: input {1} | cache_read {2} | cache_write {3} | output {4} | {5} min | turnos {6}" -f $job.id, $res.usage.input_tokens, $res.usage.cache_read_input_tokens, $res.usage.cache_creation_input_tokens, $res.usage.output_tokens, $min, $res.num_turns) }
+    if ($res) {
+      $usados = if ($res.modelUsage) { ($res.modelUsage.PSObject.Properties.Name) -join ', ' } else { '?' }
+      Log ("uso {0}: input {1} | cache_read {2} | cache_write {3} | output {4} | {5} min | turnos {6} | modelo {7}{8}" -f $job.id, $res.usage.input_tokens, $res.usage.cache_read_input_tokens, $res.usage.cache_creation_input_tokens, $res.usage.output_tokens, $min, $res.num_turns, $usados, $(if ($job.esfuerzo) { " ($($job.esfuerzo))" }))
+    }
 
+    if ($texto -match 'requires usage credits|manage usage credits') {
+      $causa = "El modelo $($job.modelo) requiere créditos de uso en la cuenta de Claude de este PC (claude.ai/settings/usage) o cambiar TIER1_MODELO_POR_PC en el servidor"
+      Set-Estado $job.id @{ estado = 'error'; detalle = $causa }
+      Log "error $($job.id) | $causa"
+      continue
+    }
     if ($texto -match 'authenticate|OAuth|not logged in|/login') {
       Set-Estado $job.id @{ estado = 'pendiente' }
       Log "ERROR de sesión de Claude: ejecuta 'claude auth login'. La orden vuelve a la cola. $($texto.Trim())"

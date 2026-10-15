@@ -157,3 +157,8 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - `tier1-runner.ps1` recibe `-Ejecutor` y `-IntakeDir`. El Intake lee su carpeta de trabajo de `.project_dir`.
   - Kit de instalación para el PC de Andres: `scripts/instalar-ejecutor.ps1` y el zip con `0. Base formatos` (copia local), el Intake y los scripts. Los skills ya los tiene instalados en su cuenta.
   - Pruebas: 29/29 en Linux.
+- 2026-10-15: modelo del Tier 1 por PC (`TIER1_MODELO_POR_PC`). Viaja en cada orden como `modelo` y `esfuerzo`, y el ejecutor lo pasa a `claude -p --model … --effort …`.
+  - En el servidor: PC Andres con `claude-fable-5-1:medium` (plan Max) y PC Roberto con `claude-opus-5-5:medium`. Opus 5.5 exige Claude Code 2.1.280 o superior; el PC de Roberto se actualizó a 2.1.300.
+  - El log registra el modelo usado. Si el modelo pide créditos de uso, la orden queda en error con ese motivo.
+  - `GET /scripts/<tier1-runner|subir-informe|instalar-ejecutor>.ps1` sirve los scripts por Tailscale, para actualizar un PC sin reenviar el kit.
+  - Pruebas: 30/30 en Linux.

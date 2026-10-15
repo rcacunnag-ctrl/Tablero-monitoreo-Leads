@@ -625,3 +625,21 @@ test('ejecutores: cada PC recibe solo sus órdenes; los automáticos van al PC c
     config.tier1SkillEnabled = false;
   }
 });
+
+test('modelo por PC: las órdenes de un PC llevan el modelo y esfuerzo configurados', async () => {
+  const { config } = await import('../src/config.js');
+  const { lanzarCompAnalysis, listJobs } = await import('../src/tier1.js');
+  const antes = config.tier1Modelos;
+  config.tier1Modelos = { Andres: { modelo: 'claude-fable-5-1', esfuerzo: 'medium' } };
+  try {
+    const [a, r] = await leadsMod.addLeads([{ estado: ESTADOS.tier1, direccion: '5 Modelo A St' }, { estado: ESTADOS.tier1, direccion: '6 Modelo R St' }]);
+    await lanzarCompAnalysis(a, 'Carlos', { enabled: true, ejecutor: 'Andres' });
+    await lanzarCompAnalysis(r, 'Carlos', { enabled: true, ejecutor: 'Roberto' });
+    const ja = (await listJobs({ estado: 'pendiente', ejecutor: 'Andres' })).find((j) => j.id === a.id);
+    const jr = (await listJobs({ estado: 'pendiente', ejecutor: 'Roberto' })).find((j) => j.id === r.id);
+    assert.deepEqual([ja.modelo, ja.esfuerzo], ['claude-fable-5-1', 'medium']);
+    assert.equal(jr.modelo, undefined);
+  } finally {
+    config.tier1Modelos = antes;
+  }
+});

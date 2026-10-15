@@ -69,10 +69,11 @@ export async function listJobs({ estado, ejecutor } = {}) {
   all.sort((a, b) => String(a.creado_en).localeCompare(String(b.creado_en)));
   const delPc = all.filter((j) => !ejecutor || ejecutorDe(j) === ejecutor);
   const jobs = delPc.filter((j) => !estado || j.estado === estado);
-  if (estado !== 'pendiente') return jobs;
+  const conModelo = (j) => ({ ...j, ...config.tier1Modelos[ejecutorDe(j)] });
+  if (estado !== 'pendiente') return jobs.map(conModelo);
   const hoy = dia(Date.now());
   let cupo = config.tier1AutoMaxDia - delPc.filter((j) => j.auto && j.iniciado_en && dia(j.iniciado_en) === hoy).length;
-  return jobs.filter((j) => !j.auto || cupo-- > 0);
+  return jobs.filter((j) => !j.auto || cupo-- > 0).map(conModelo);
 }
 
 /** Actualiza el estado de una orden. Devuelve la orden actualizada. */

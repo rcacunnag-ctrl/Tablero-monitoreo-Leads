@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { exportXlsx, exportOutputs } from './sink.js';
 import { listLeads } from './leads.js';
@@ -75,6 +75,12 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
         const r = await leerInforme(inf[1], decodeURIComponent(inf[2]));
         res.writeHead(200, cabecerasInforme(r));
         return res.end(r.data);
+      }
+      // Scripts del PC ejecutor, para actualizarlos desde cada PC por Tailscale (no tienen secretos)
+      const script = url.pathname.match(/^\/scripts\/(tier1-runner|subir-informe|instalar-ejecutor)\.ps1$/);
+      if (script) {
+        const data = await fs.readFile(fileURLToPath(new URL(`../scripts/${script[1]}.ps1`, import.meta.url)));
+        return send(res, 200, 'text/plain; charset=utf-8', data);
       }
       if (url.pathname.startsWith('/media/')) {
         const name = path.basename(decodeURIComponent(url.pathname.slice(7)));
