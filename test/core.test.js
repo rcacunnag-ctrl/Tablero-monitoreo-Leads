@@ -600,3 +600,28 @@ test('Tier 2: orden por fases para el Intake, avance, error, reintento y condado
     config.tier2SkillEnabled = false;
   }
 });
+
+test('ejecutores: cada PC recibe solo sus órdenes; los automáticos van al PC configurado', async () => {
+  const { config } = await import('../src/config.js');
+  const { listJobs } = await import('../src/tier1.js');
+  config.tier1SkillEnabled = true;
+  try {
+    const [a, b, c] = await leadsMod.addLeads([
+      { estado: ESTADOS.nuevo, direccion: '1 Pc Roberto St', precio_usd: 390000, arv_usd: 400000 },
+      { estado: ESTADOS.nuevo, direccion: '2 Pc Andres St', precio_usd: 390000, arv_usd: 400000 },
+      { estado: ESTADOS.nuevo, direccion: '3 Auto Pc St', precio_usd: 100000, arv_usd: 400000 },
+    ]);
+    await assert.rejects(actions.pasarATier1(a.id, 'Carlos', { ejecutor: 'Pedro' }), /PC no válido/);
+    await actions.pasarATier1(a.id, 'Carlos', { ejecutor: 'Roberto' });
+    await actions.pasarATier1(b.id, 'Carlos', { ejecutor: 'Andres' });
+    await actions.evaluarIngresados([c], {});
+    const ids = async (pc) => (await listJobs({ estado: 'pendiente', ejecutor: pc })).map((j) => j.id);
+    assert.ok((await ids('Roberto')).includes(a.id) && !(await ids('Roberto')).includes(b.id));
+    assert.ok((await ids('Andres')).includes(b.id));
+    // el automático va al PC de Andres (sin filtrar por estado: el tope diario lo puede dejar para mañana)
+    assert.equal((await listJobs({ ejecutor: 'Andres' })).find((j) => j.id === c.id)?.auto, true);
+    assert.equal((await leadsMod.listLeads()).find((l) => l.id === c.id).tier1_ejecutor, config.tier1AutoEjecutor);
+  } finally {
+    config.tier1SkillEnabled = false;
+  }
+});

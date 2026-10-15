@@ -5,6 +5,9 @@
 # cada 15 minutos (ver docs/PLAN-FLUJO-LEADS.md). Requiere Tailscale encendido y `claude auth login` hecho.
 param(
   [string]$Api = 'http://100.97.63.81:3000',
+  # Nombre de este PC en el panel (selector "Ejecutar en"): solo toma las órdenes dirigidas a él
+  [string]$Ejecutor = 'Roberto',
+  [string]$IntakeDir = (Join-Path $env:USERPROFILE 'OneDrive\Documents\1. Proyecto Real State US\Claude Code\Intake Service'),
   [int]$MaxPorCorrida = 2,
   [string]$LeadsRoot = (Join-Path $env:USERPROFILE 'OneDrive\Documents\4. Ejecucion de procesos\1. Underwriting')
 )
@@ -18,7 +21,7 @@ $log = Join-Path $dir ('tier1-{0:yyyy-MM}.log' -f (Get-Date))
 function Log([string]$m) { Add-Content -LiteralPath $log -Encoding utf8 -Value ('{0:yyyy-MM-dd HH:mm:ss} {1}' -f (Get-Date), $m) }
 
 function Get-Jobs([string]$estado) {
-  $r = Invoke-RestMethod -Uri "$Api/api/tier1-jobs?estado=$estado" -TimeoutSec 20
+  $r = Invoke-RestMethod -Uri "$Api/api/tier1-jobs?estado=$estado&ejecutor=$([uri]::EscapeDataString($Ejecutor))" -TimeoutSec 20
   return @($r | Where-Object { $_ })
 }
 function Set-Estado([string]$id, [hashtable]$body, [string]$tipo = 'tier1') {
@@ -31,7 +34,6 @@ function Set-Estado([string]$id, [hashtable]$body, [string]$tipo = 'tier1') {
 # Las fases 1–4 las corre el Intake Service del PC (claude -p con Chrome, modelo por fase, reintento
 # cuando se acaba el cupo). Este bloque no abre Claude: crea el caso, dispara la fase siguiente cuando
 # la anterior termina, copia el avance al panel y sube los informes de las fases 3 y 4.
-$IntakeDir = Join-Path $env:USERPROFILE 'OneDrive\Documents\1. Proyecto Real State US\Claude Code\Intake Service'
 $Intake = 'http://127.0.0.1:8787'
 function Intake([string]$metodo, [string]$ruta, $body) {
   $p = @{ Method = $metodo; Uri = "$Intake$ruta"; Headers = @{ 'X-Intake-Token' = $script:IntakeToken }; TimeoutSec = 30 }
@@ -66,7 +68,7 @@ function Send-T2Informes($job, $caso, [int]$fase) {
   }
 }
 function Sync-Tier2 {
-  $jobs = @((Invoke-RestMethod -Uri "$Api/api/tier2-jobs" -TimeoutSec 20) | Where-Object { $_ -and $_.estado -in 'pendiente', 'en_proceso' })
+  $jobs = @((Invoke-RestMethod -Uri "$Api/api/tier2-jobs?ejecutor=$([uri]::EscapeDataString($Ejecutor))" -TimeoutSec 20) | Where-Object { $_ -and $_.estado -in 'pendiente', 'en_proceso' })
   if (-not $jobs.Count -or -not (Start-Intake)) { return }
   $script:IntakeToken = (Get-Content -LiteralPath (Join-Path $IntakeDir '.intake_token') -Raw).Trim()
   foreach ($job in $jobs) {

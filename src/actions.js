@@ -15,6 +15,11 @@ const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });
 export const USUARIO_AUTO = 'Automático';
 const PREVIOS_TIER1 = [ESTADOS.nuevo, ESTADOS.revisarCondado, ESTADOS.noCalifica];
 
+function checkEjecutor(ejecutor) {
+  if (!config.ejecutores.includes(ejecutor)) throw badRequest(`PC no válido. Opciones: ${config.ejecutores.join(', ')}`);
+  return ejecutor;
+}
+
 function checkUser(usuario) {
   if (!config.tier1Users.includes(usuario)) throw badRequest(`Usuario no válido. Opciones: ${config.tier1Users.join(', ')}`);
 }
@@ -32,15 +37,19 @@ export async function descartar(id) {
   return { ok: true, resultado: 'descartado' };
 }
 
-/** auto=true: lo pasan los criterios (el informe cuenta para el tope diario). */
-export async function pasarATier1(id, usuario, { auto = false } = {}) {
+/**
+ * auto=true: lo pasan los criterios (el informe va al PC de TIER1_AUTO_EJECUTOR y cuenta para su tope diario).
+ * ejecutor: PC que corre el informe (selector del panel).
+ */
+export async function pasarATier1(id, usuario, { auto = false, ejecutor } = {}) {
   if (!(auto && usuario === USUARIO_AUTO)) checkUser(usuario);
+  const pc = checkEjecutor(ejecutor || (auto ? config.tier1AutoEjecutor : config.ejecutores[0]));
   const lead = await getLead(id);
   if (lead.estado === ESTADOS.pendienteDireccion) throw badRequest('Primero agrega la dirección');
   if (!PREVIOS_TIER1.includes(lead.estado)) throw badRequest(`El lead ya está en ${lead.estado}`);
   if (!lead.precio_usd) throw badRequest('Falta el precio: agrégalo antes de pasar a Tier 1');
-  const updated = await updateLead(id, { estado: ESTADOS.tier1, alerta: computeAlerta({ ...lead, estado: ESTADOS.tier1 }), tier1_usuario: usuario, tier1_en: new Date().toISOString(), tier1_auto: auto });
-  const skill = await lanzarCompAnalysis(updated, usuario, { auto });
+  const updated = await updateLead(id, { estado: ESTADOS.tier1, alerta: computeAlerta({ ...lead, estado: ESTADOS.tier1 }), tier1_usuario: usuario, tier1_en: new Date().toISOString(), tier1_auto: auto, tier1_ejecutor: pc });
+  const skill = await lanzarCompAnalysis(updated, usuario, { auto, ejecutor: pc });
   if (skill.lanzado) await updateLead(id, { informe_estado: skill.estado, informe_en: new Date().toISOString() });
   await exportOutputs();
   return { ok: true, resultado: 'tier1', auto, skill };
@@ -214,10 +223,11 @@ export async function pasarATier2(id, body, usuario) {
   const lead = await getLead(id);
   if (lead.estado !== ESTADOS.tier1) throw badRequest('Solo un lead en Tier 1 puede pasar a Tier 2');
   const comparables = Number(body.comparables || 12);
+  const pc = checkEjecutor(body.ejecutor || config.ejecutores[0]);
   if (!COMPARABLES.includes(comparables)) throw badRequest(`Comparables: ${COMPARABLES.join(', ')}`);
   const cubierto = config.tier2Counties.some((c) => c.toLowerCase() === String(lead.condado || '').toLowerCase());
-  const updated = await updateLead(id, { estado: ESTADOS.tier2, tier2_usuario: usuario, tier2_en: new Date().toISOString(), tier2_comparables: comparables });
-  const skill = cubierto ? await lanzarTier2(updated, usuario, { comparables }) : { lanzado: false, motivo: `${lead.condado || 'condado sin confirmar'}: Tier 2 manual (los skills cubren ${config.tier2Counties.join(' y ')})` };
+  const updated = await updateLead(id, { estado: ESTADOS.tier2, tier2_usuario: usuario, tier2_en: new Date().toISOString(), tier2_comparables: comparables, tier2_ejecutor: pc });
+  const skill = cubierto ? await lanzarTier2(updated, usuario, { comparables, ejecutor: pc }) : { lanzado: false, motivo: `${lead.condado || 'condado sin confirmar'}: Tier 2 manual (los skills cubren ${config.tier2Counties.join(' y ')})` };
   await updateLead(id, skill.lanzado ? { tier2_estado: 'pendiente', tier2_fase: 1, tier2_detalle: '' } : { tier2_estado: '', tier2_detalle: skill.motivo });
   await exportOutputs();
   return { ok: true, resultado: 'tier2', skill };

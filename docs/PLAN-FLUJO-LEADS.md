@@ -150,3 +150,10 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - Reencolado y verificado: listo en 18 minutos (122 turnos), dashboard de 2.1 MB subido al panel.
 
 - 2026-10-11: los avisos al grupo pasan a **dos resúmenes al día, 11:00 y 17:30 hora de Colombia** (`NOTIF_HORARIOS`, `NOTIF_TZ=America/Bogota`). Solo se envían si hay novedades. Si a esa hora no se pudo enviar, se reintenta durante la hora siguiente; después, lo pendiente pasa al siguiente horario. Pruebas: 28/28 en Linux.
+- 2026-10-13: **varios PC ejecutores.**
+  - En el panel, los botones Tier 1 y Tier 2 tienen el selector "Ejecutar en" (PC Roberto / PC Andres). Cada orden guarda su `ejecutor`, y `GET /api/tier1-jobs` y `/api/tier2-jobs` aceptan `?ejecutor=`.
+  - El tope diario de automáticos cuenta por PC.
+  - Los Tier 1 automáticos van a `TIER1_AUTO_EJECUTOR`. La decisión del usuario fue el PC de Andres; en el servidor queda `Roberto` hasta que ese PC esté instalado.
+  - `tier1-runner.ps1` recibe `-Ejecutor` y `-IntakeDir`. El Intake lee su carpeta de trabajo de `.project_dir`.
+  - Kit de instalación para el PC de Andres: `scripts/instalar-ejecutor.ps1` y el zip con `0. Base formatos` (copia local), el Intake y los scripts. Los skills ya los tiene instalados en su cuenta.
+  - Pruebas: 29/29 en Linux.

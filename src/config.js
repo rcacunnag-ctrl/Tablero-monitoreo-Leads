@@ -37,6 +37,10 @@ export const config = {
   critPrecioMax: Number(process.env.CRIT_PRECIO_MAX || 300000),
   // Informes Tier 1 automáticos que pueden empezar por día (los demás esperan al día siguiente)
   tier1AutoMaxDia: Number(process.env.TIER1_AUTO_MAX_DIA || 3),
+  // PCs que ejecutan los informes (cada uno corre scripts/tier1-runner.ps1 -Ejecutor <nombre>).
+  // El primero es el predeterminado de las órdenes viejas; los Tier 1 automáticos van a TIER1_AUTO_EJECUTOR.
+  ejecutores: list(process.env.EJECUTORES || 'Roberto,Andres'),
+  tier1AutoEjecutor: (process.env.TIER1_AUTO_EJECUTOR || 'Andres').trim(),
   // Tier 2: fases 1–4 en el PC ejecutor. Los skills cubren solo estos condados (Martin es excepción manual)
   tier2SkillEnabled: bool(process.env.TIER2_SKILL_ENABLED, false),
   tier2Counties: list(process.env.TIER2_COUNTIES || 'Broward,Palm Beach'),

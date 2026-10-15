@@ -17,7 +17,7 @@ import { guardarInforme, leerInforme, cabecerasInforme, usoDisco } from './infor
 
 const ACTIONS = {
   descartar: (id) => descartar(id),
-  tier1: (id, body) => pasarATier1(id, body.usuario),
+  tier1: (id, body) => pasarATier1(id, body.usuario, { ejecutor: body.ejecutor }),
   direccion: (id, body) => agregarDireccion(id, body, body.usuario),
   precio: (id, body) => agregarPrecio(id, body, body.usuario),
   inspeccion: (id, body) => registrarInspeccion(id, body, body.usuario),
@@ -50,14 +50,14 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
       }
       if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', PAGE);
       if (url.pathname === '/api/leads') {
-        const body = { leads: await listLeads(), usuarios: config.tier1Users, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
+        const body = { leads: await listLeads(), usuarios: config.tier1Users, ejecutores: config.ejecutores, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
         return send(res, 200, 'application/json', JSON.stringify(body));
       }
       if (url.pathname === '/api/tier1-jobs') {
-        return send(res, 200, 'application/json', JSON.stringify(await listJobs({ estado: url.searchParams.get('estado') || undefined })));
+        return send(res, 200, 'application/json', JSON.stringify(await listJobs({ estado: url.searchParams.get('estado') || undefined, ejecutor: url.searchParams.get('ejecutor') || undefined })));
       }
       if (url.pathname === '/api/tier2-jobs') {
-        return send(res, 200, 'application/json', JSON.stringify(await listTier2Jobs({ estado: url.searchParams.get('estado') || undefined })));
+        return send(res, 200, 'application/json', JSON.stringify(await listTier2Jobs({ estado: url.searchParams.get('estado') || undefined, ejecutor: url.searchParams.get('ejecutor') || undefined })));
       }
       if (url.pathname === '/descargar/csv') {
         const data = await fs.readFile(config.csvFile).catch(() => Buffer.from(''));

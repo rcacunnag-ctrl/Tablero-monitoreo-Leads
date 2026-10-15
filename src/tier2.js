@@ -25,22 +25,22 @@ async function escribir(job) {
   return job;
 }
 
-export async function lanzarTier2(lead, usuario, { comparables = 12, enabled = config.tier2SkillEnabled } = {}) {
+export async function lanzarTier2(lead, usuario, { comparables = 12, enabled = config.tier2SkillEnabled, ejecutor = config.ejecutores[0] } = {}) {
   if (!enabled) return { lanzado: false, motivo: 'por habilitar (TIER2_SKILL_ENABLED=false)' };
   const now = new Date().toISOString();
   await escribir({
-    id: lead.id, usuario, comparables, fase: 1, estado: 'pendiente', creado_en: now, actualizado_en: now, historial: [],
+    id: lead.id, usuario, ejecutor, comparables, fase: 1, estado: 'pendiente', creado_en: now, actualizado_en: now, historial: [],
     lead: { ...jobLead(lead), condicion: lead.condicion, tipo_negocio: lead.tipo_negocio },
   });
-  return { lanzado: true, estado: 'pendiente', fase: 1 };
+  return { lanzado: true, estado: 'pendiente', fase: 1, ejecutor };
 }
 
-export async function listTier2Jobs({ estado } = {}) {
+export async function listTier2Jobs({ estado, ejecutor } = {}) {
   const files = await fs.readdir(config.dirs.tier2Jobs).catch(() => []);
   const jobs = [];
   for (const f of files.filter((n) => n.endsWith('.json'))) jobs.push(JSON.parse(await fs.readFile(path.join(config.dirs.tier2Jobs, f), 'utf8')));
   jobs.sort((a, b) => String(a.creado_en).localeCompare(String(b.creado_en)));
-  return jobs.filter((j) => !estado || j.estado === estado);
+  return jobs.filter((j) => (!estado || j.estado === estado) && (!ejecutor || (j.ejecutor || config.ejecutores[0]) === ejecutor));
 }
 
 /**

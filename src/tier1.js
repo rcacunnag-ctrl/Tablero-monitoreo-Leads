@@ -31,7 +31,7 @@ export const jobLead = (lead) => ({
  * Deja la orden del informe. auto=true: la lanzaron los criterios y cuenta para el tope diario
  * (config.tier1AutoMaxDia); las manuales no tienen tope.
  */
-export async function lanzarCompAnalysis(lead, usuario, { enabled = config.tier1SkillEnabled, auto = false } = {}) {
+export async function lanzarCompAnalysis(lead, usuario, { enabled = config.tier1SkillEnabled, auto = false, ejecutor = config.ejecutores[0] } = {}) {
   if (!enabled) return { lanzado: false, motivo: 'por habilitar (TIER1_SKILL_ENABLED=false)' };
   await fs.mkdir(config.dirs.tier1Jobs, { recursive: true });
   const now = new Date().toISOString();
@@ -40,33 +40,38 @@ export async function lanzarCompAnalysis(lead, usuario, { enabled = config.tier1
     skill: SKILL_TIER1,
     usuario,
     auto,
+    ejecutor,
     estado: 'pendiente',
     creado_en: now,
     actualizado_en: now,
     lead: jobLead(lead),
   };
   await fs.writeFile(jobFile(lead.id), JSON.stringify(job, null, 2));
-  return { lanzado: true, estado: 'pendiente' };
+  return { lanzado: true, estado: 'pendiente', ejecutor };
 }
 
 /** Día calendario (AAAA-MM-DD) en la zona horaria del negocio. */
 const dia = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: config.timeZone });
 
+/** PC que ejecuta la orden (las anteriores a esta opción son del primer ejecutor). */
+export const ejecutorDe = (j) => j.ejecutor || config.ejecutores[0];
+
 /**
- * Órdenes, de la más antigua a la más nueva. Con estado "pendiente" (lo que pide el PC ejecutor),
- * las automáticas se limitan al cupo que queda hoy; las que no caben esperan al día siguiente.
+ * Órdenes, de la más antigua a la más nueva; con `ejecutor`, solo las de ese PC. Con estado "pendiente"
+ * (lo que pide el PC), las automáticas se limitan al cupo diario de ese PC; las demás esperan al día siguiente.
  */
-export async function listJobs({ estado } = {}) {
+export async function listJobs({ estado, ejecutor } = {}) {
   const files = await fs.readdir(config.dirs.tier1Jobs).catch(() => []);
   const all = [];
   for (const f of files.filter((n) => n.endsWith('.json'))) {
     all.push(JSON.parse(await fs.readFile(path.join(config.dirs.tier1Jobs, f), 'utf8')));
   }
   all.sort((a, b) => String(a.creado_en).localeCompare(String(b.creado_en)));
-  const jobs = all.filter((j) => !estado || j.estado === estado);
+  const delPc = all.filter((j) => !ejecutor || ejecutorDe(j) === ejecutor);
+  const jobs = delPc.filter((j) => !estado || j.estado === estado);
   if (estado !== 'pendiente') return jobs;
   const hoy = dia(Date.now());
-  let cupo = config.tier1AutoMaxDia - all.filter((j) => j.auto && j.iniciado_en && dia(j.iniciado_en) === hoy).length;
+  let cupo = config.tier1AutoMaxDia - delPc.filter((j) => j.auto && j.iniciado_en && dia(j.iniciado_en) === hoy).length;
   return jobs.filter((j) => !j.auto || cupo-- > 0);
 }
 
