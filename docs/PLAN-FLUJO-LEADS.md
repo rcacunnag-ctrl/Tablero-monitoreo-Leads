@@ -162,3 +162,5 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - El log registra el modelo usado. Si el modelo pide créditos de uso, la orden queda en error con ese motivo.
   - `GET /scripts/<tier1-runner|subir-informe|instalar-ejecutor>.ps1` sirve los scripts por Tailscale, para actualizar un PC sin reenviar el kit.
   - Pruebas: 30/30 en Linux.
+- 2026-10-15: prueba del PC de Andres. Hizo el Tier 1 de 612 Minnesota St con Fable 5.1 en 16 minutos y subió el dashboard. Decisión del usuario: los Tier 1 automáticos se quedan en el PC de Roberto (`TIER1_AUTO_EJECUTOR=Roberto`).
+- 2026-10-15: los mapas de los informes mostraban "Access blocked" de OpenStreetMap. Causa: el panel servía los informes con `Referrer-Policy: no-referrer`, y OpenStreetMap bloquea las peticiones sin Referer. Arreglo: los informes usan `strict-origin`, que envía solo el dominio, nunca la ruta ni el token. Verificado: las 15 imágenes del mapa cargan.

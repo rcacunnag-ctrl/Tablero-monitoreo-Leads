@@ -91,7 +91,9 @@ export async function leerInforme(id, nombre) {
  * corren, pero no pueden leer ni usar el panel. Los .docx/.xlsx se descargan.
  */
 export function cabecerasInforme({ type, nombre }) {
-  const h = { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+  // strict-origin: a los mapas (OpenStreetMap) solo llega el dominio, nunca la ruta (que en la vista lleva el token).
+  // Con no-referrer, OpenStreetMap responde con la imagen "Access blocked" en cada tile.
+  const h = { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin' };
   if (type.startsWith('text/html')) h['Content-Security-Policy'] = 'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads';
   const modo = /html|pdf/.test(type) ? 'inline' : 'attachment';
   h['Content-Disposition'] = `${modo}; filename*=UTF-8''${encodeURIComponent(nombre)}`;
