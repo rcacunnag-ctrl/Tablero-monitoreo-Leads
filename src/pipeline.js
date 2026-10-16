@@ -9,13 +9,13 @@ export const ALERTA_DIRECCION = 'Solicitar dirección al wholesaler';
 
 /**
  * Alerta del lead según lo que falta pedirle al wholesaler: dirección (Pendiente dirección), precio
- * y ARV (este solo antes de Tier 1, porque sin él no se pueden evaluar los criterios).
+ * y precio. El ARV no se pide: el wholesaler no lo envía después (sin ARV no se evalúan los criterios
+ * y el Tier 1 se decide a mano).
  */
 export function computeAlerta(lead) {
   const falta = [];
   if (lead.estado === ESTADOS.pendienteDireccion) falta.push('dirección');
   if (!lead.precio_usd) falta.push('precio');
-  if (!lead.arv_usd && [ESTADOS.nuevo, ESTADOS.revisarCondado].includes(lead.estado)) falta.push('ARV');
   if (!falta.length) return '';
   const lista = falta.length > 1 ? `${falta.slice(0, -1).join(', ')} y ${falta.at(-1)}` : falta[0];
   return `Solicitar ${lista} al wholesaler`;

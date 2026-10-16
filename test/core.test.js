@@ -356,7 +356,7 @@ test('regla de precio: alerta, agregar precio y Tier 1', async () => {
   const { computeAlerta } = await import('../src/pipeline.js');
   assert.equal(computeAlerta({ estado: ESTADOS.nuevo, precio_usd: 300000, arv_usd: 1 }), '');
   assert.equal(computeAlerta({ estado: ESTADOS.nuevo, arv_usd: 1 }), 'Solicitar precio al wholesaler');
-  assert.equal(computeAlerta({ estado: ESTADOS.nuevo }), 'Solicitar precio y ARV al wholesaler');
+  assert.equal(computeAlerta({ estado: ESTADOS.nuevo }), 'Solicitar precio al wholesaler'); // el ARV no se pide
   assert.equal(computeAlerta({ estado: ESTADOS.tier1, precio_usd: 1 }), '');
   assert.equal(computeAlerta({ estado: ESTADOS.pendienteDireccion }), 'Solicitar dirección y precio al wholesaler');
   assert.equal(computeAlerta({ estado: ESTADOS.pendienteDireccion, precio_usd: 1 }), 'Solicitar dirección al wholesaler');
@@ -410,7 +410,7 @@ test('criterios: Tier 1 automático con tope diario, No califica y falta ARV', a
     assert.equal((await get(nuevos[4].id)).estado, ESTADOS.noCalifica);
     assert.match((await get(nuevos[4].id)).criterio, /precio/);
     assert.equal((await get(nuevos[5].id)).estado, ESTADOS.nuevo);
-    assert.equal((await get(nuevos[5].id)).alerta, 'Solicitar ARV al wholesaler');
+    assert.equal((await get(nuevos[5].id)).alerta, ''); // sin ARV: queda Nuevo, sin alerta
     assert.equal((await get(nuevos[6].id)).estado, ESTADOS.pendienteDireccion); // sin dirección no se evalúa
 
     // Tope diario de 3 automáticos: el cuarto espera; los que empiezan consumen cupo
