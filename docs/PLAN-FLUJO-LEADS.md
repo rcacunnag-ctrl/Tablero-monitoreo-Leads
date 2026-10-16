@@ -174,3 +174,4 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - Limpieza única: de los 3 leads de SE 15th St #513 queda el de 1731 (731 era un error del wholesaler y el otro era el repost del 9-oct). También se corrigió 814 42nd St a West Palm Beach. Respaldo en `data.bak-*-dup`.
   - Revisión de las 30 direcciones con el Census para los enlaces de los portales: 28 coinciden, 814 se corrigió y 239 Gulfstream Blvd (Boynton Beach) no aparece en el Census; se dejó tal como la escribió el wholesaler.
   - Pruebas: 32/32 en Linux.
+- 2026-10-16: las filas del panel alternan dos tonos (blanco y `#F2F6FB`; al pasar el mouse, `#E6EEF8`), con equivalentes para el modo oscuro. Aplica también a la vista pública.

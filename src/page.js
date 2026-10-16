@@ -3,8 +3,8 @@ export const PAGE = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monitor de Propiedades</title>
 <style>
-:root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e3e3de;--nuevo:#e3eefc;--pend:#fff1c2;--rev:#fce4d6;--nc:#ececea;--t1:#d7f0dc;--t2:#e4ddfb;--compra:#ffe2bd;--accent:#1f6f50;--danger:#a3322b}
-@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1d;--fg:#ececea;--muted:#a3a39d;--line:#33332f;--nuevo:#1d3550;--pend:#4d4116;--rev:#4d2c1a;--nc:#3a3a36;--t1:#1e4a2b;--t2:#35295c;--compra:#523713;--accent:#6fcf9f;--danger:#f08a80}}
+:root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e3e3de;--nuevo:#e3eefc;--pend:#fff1c2;--rev:#fce4d6;--nc:#ececea;--t1:#d7f0dc;--t2:#e4ddfb;--compra:#ffe2bd;--accent:#1f6f50;--danger:#a3322b;--zebra:#f2f6fb;--hover:#e6eef8}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1d;--fg:#ececea;--muted:#a3a39d;--line:#33332f;--nuevo:#1d3550;--pend:#4d4116;--rev:#4d2c1a;--nc:#3a3a36;--t1:#1e4a2b;--t2:#35295c;--compra:#523713;--accent:#6fcf9f;--danger:#f08a80;--zebra:#262a30;--hover:#2e343c}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 header{padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
 h1{font-size:18px;margin:0}.bar{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 12px}
@@ -17,6 +17,7 @@ button{cursor:pointer}a.btn{text-decoration:none;color:var(--accent);font-weight
 button.ok{border-color:var(--accent);color:var(--accent);font-weight:600}button.del{color:var(--danger)}
 .wrap{padding:0 16px 24px;overflow-x:auto}
 table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:8px}
+#rows tr:nth-child(even)>td{background:var(--zebra)}#rows tr:hover>td{background:var(--hover)}
 th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{position:sticky;top:0;background:var(--card);font-size:12px;color:var(--muted)}
 .e{border-radius:4px;padding:2px 6px;font-weight:600;font-size:12px;white-space:nowrap}
 .e.Nuevo{background:var(--nuevo)}.e.Pendiente{background:var(--pend)}.e.Revisar{background:var(--rev)}.e.No{background:var(--nc)}.e.T1{background:var(--t1)}.e.T2{background:var(--t2)}.e.Compra{background:var(--compra)}
