@@ -652,3 +652,27 @@ test('extracción: filtra direcciones basura del OCR y conserva las reales', asy
   const r = await ex('Flyer\n1 Sr Fort Lauderdale\n4 rd Hollywood FL\n441 NW 18th Ave, Fort Lauderdale, FL 33311 $435,000');
   assert.deepEqual(r.listings.map((l) => l.street_address), ['441 NW 18th Ave']);
 });
+
+test('reposts y correcciones del wholesaler; "West Palm Beach" sin coma', async () => {
+  const { findAddresses } = await import('../src/extract.js');
+  assert.deepEqual(findAddresses('814 42nd St West Palm Beach FL 33407').map((a) => [a.street_address, a.city]), [['814 42nd St', 'West Palm Beach']]);
+  assert.equal(findAddresses('123 Main St W, Lake Worth FL')[0].street_address, '123 Main St W');
+
+  const base = { estado: ESTADOS.nuevo, ciudad: 'Fort Lauderdale', autor: 'Wh1', grupo: 'G', precio_usd: 174900, arv_usd: 264900 };
+  const [orig] = await leadsMod.addLeads([{ ...base, direccion: '731 SE 15th St #513', clave_direccion: '731 SE 15TH ST 513 FTL', fecha_mensaje: '2026-10-08T19:08:00Z' }]);
+  // corrección 17 min después: misma calle, unidad, precio y ARV; otro número
+  const r1 = await leadsMod.addLeads([{ ...base, direccion: '1731 SE 15th St #513', clave_direccion: '1731 SE 15TH ST 513 FTL', fecha_mensaje: '2026-10-08T19:25:00Z' }]);
+  assert.equal(r1.length, 0);
+  const get = async () => (await leadsMod.listLeads()).find((l) => l.id === orig.id);
+  assert.equal((await get()).direccion, '1731 SE 15th St #513');
+  assert.equal((await get()).direccion_corregida_de, '731 SE 15th St #513');
+  assert.ok(await leadsMod.isDiscarded('731 SE 15TH ST 513 FTL'));
+  // repost al día siguiente con otro precio: no crea lead, actualiza el existente
+  const r2 = await leadsMod.addLeads([{ ...base, precio_usd: 169900, direccion: '1731 SE 15th St #513', clave_direccion: '1731 SE 15TH ST 513 FTL', fecha_mensaje: '2026-10-09T16:37:00Z' }]);
+  assert.equal(r2.length, 0);
+  assert.deepEqual([(await get()).publicaciones, (await get()).ultima_publicacion, (await get()).precio_repost], [2, '2026-10-09T16:37:00Z', 169900]);
+  // otro autor u otra unidad no es corrección
+  const r3 = await leadsMod.addLeads([{ ...base, autor: 'Otro', direccion: '1733 SE 15th St #513', clave_direccion: 'X1', fecha_mensaje: '2026-10-08T20:00:00Z' },
+    { ...base, direccion: '1735 SE 15th St #514', clave_direccion: 'X2', fecha_mensaje: '2026-10-08T20:00:00Z' }]);
+  assert.equal(r3.length, 2);
+});

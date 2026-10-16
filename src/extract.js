@@ -17,7 +17,7 @@ const UNIT = String.raw`(?:\s*,?\s*(?:Unit|Apt|Apartment|Suite|Ste|#)\s*#?\s*[\w
 // Los espacios son [ \t] (no \s): una calle no cruza saltos de línea. El número no puede venir pegado a
 // un precio u otro número ("$485,000\n1025 N H St" no debe dar "000 1025 N H St").
 const STREET_RE = new RegExp(
-  String.raw`(?<![\d$,.])\b(\d{1,6}[A-Za-z]?)[ \t]+((?:(?:${DIRS})\.?[ \t]+)?(?:[A-Za-z0-9'.-]+[ \t]+){0,4}?(?:${SUFFIXES})\.?(?:[ \t]+(?:${DIRS})\.?(?![A-Za-z]))?` +
+  String.raw`(?<![\d$,.])\b(\d{1,6}[A-Za-z]?)[ \t]+((?:(?:${DIRS})\.?[ \t]+)?(?:[A-Za-z0-9'.-]+[ \t]+){0,4}?(?:${SUFFIXES})\.?(?:[ \t]+(?:${DIRS})\.?(?![A-Za-z])(?![ \t]+Palm\b))?` +
   String.raw`|(?:(?:${DIRS})\.?[ \t]+)?(?:A1A|US[- ]?(?:Hwy|Highway)?[ \t]?1|(?:State Road|SR|US Highway|US Hwy)[ \t]?\d{1,3}|Federal Hwy|Dixie Hwy))\b${UNIT}`,
   'gi',
 );

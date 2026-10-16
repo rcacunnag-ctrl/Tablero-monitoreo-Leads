@@ -93,6 +93,8 @@ const archivos=r=>(r.informes||[]).map(i=>'<div><a target="_blank" rel="noopener
 // Lo que pasó con el lead: motivo de No califica, quién lo movió de etapa y la inspección
 function detalle(r){const d=[];
  if(r.estado==='No califica'&&r.criterio)d.push('No califica: '+esc(r.criterio));
+ if(r.publicaciones>1)d.push('Publicado '+r.publicaciones+' veces · último '+fechaCorta(r.ultima_publicacion)+(r.precio_repost?' · nuevo precio '+money(r.precio_repost):''));
+ if(r.direccion_corregida_de)d.push('Dirección corregida por el wholesaler (antes: '+esc(r.direccion_corregida_de)+')');
  if(r.tier1_usuario)d.push('Tier 1: '+esc(r.tier1_usuario)+' '+fecha(r.tier1_en)+(r.tier1_ejecutor?' · PC '+esc(r.tier1_ejecutor):''));
  if(r.inspeccion_se_hace)d.push('Inspección: '+(r.inspeccion_se_hace==='No'?'no se hace':'ejecutada: '+esc(r.inspeccion_ejecutada))+(r.inspeccion_obs?'<br><i>'+esc(r.inspeccion_obs)+'</i>':''));
  if(r.tier2_usuario)d.push('Tier 2: '+esc(r.tier2_usuario)+' '+fecha(r.tier2_en)+(r.tier2_comparables?' · '+r.tier2_comparables+' comps':'')+(r.tier2_ejecutor?' · PC '+esc(r.tier2_ejecutor):''));
