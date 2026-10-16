@@ -48,7 +48,10 @@ Copy-Item -Force (Join-Path $kit 'scripts\tier1-runner.ps1'), (Join-Path $kit 's
 Ok $scripts
 
 Write-Host "`n4. Tarea programada (cada 15 min, con la sesión de Windows iniciada)"
-$pwsh = (Get-Command pwsh).Source
+# Alias estable de la Store (LOCALAPPDATA\Microsoft\WindowsApps): la ruta con versión (Program Files\WindowsApps\Microsoft.PowerShell_7.x...)
+# desaparece cuando la Store actualiza PowerShell y la tarea deja de correr sin avisar.
+$alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\pwsh.exe'
+$pwsh = if (Test-Path -LiteralPath $alias) { $alias } else { (Get-Command pwsh).Source }
 $runner = Join-Path $scripts 'tier1-runner.ps1'
 $argumentos = "--headless `"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Ejecutor `"$Ejecutor`" -LeadsRoot `"$under`" -IntakeDir `"$intake`" -Api `"$Api`""
 $accion = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument $argumentos
