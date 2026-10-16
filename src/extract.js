@@ -18,7 +18,7 @@ const UNIT = String.raw`(?:\s*,?\s*(?:Unit|Apt|Apartment|Suite|Ste|#)\s*#?\s*[\w
 // un precio u otro número ("$485,000\n1025 N H St" no debe dar "000 1025 N H St").
 const STREET_RE = new RegExp(
   String.raw`(?<![\d$,.])\b(\d{1,6}[A-Za-z]?)[ \t]+((?:(?:${DIRS})\.?[ \t]+)?(?:[A-Za-z0-9'.-]+[ \t]+){0,4}?(?:${SUFFIXES})\.?(?:[ \t]+(?:${DIRS})\.?(?![A-Za-z]))?` +
-  String.raw`|(?:(?:${DIRS})\.?[ \t]+)?(?:A1A|US[- ]?(?:Hwy|Highway)?[ \t]?1|(?:State Road|SR|US Highway|US Hwy|Federal Hwy|Dixie Hwy)[ \t]?\d{0,3}))\b${UNIT}`,
+  String.raw`|(?:(?:${DIRS})\.?[ \t]+)?(?:A1A|US[- ]?(?:Hwy|Highway)?[ \t]?1|(?:State Road|SR|US Highway|US Hwy)[ \t]?\d{1,3}|Federal Hwy|Dixie Hwy))\b${UNIT}`,
   'gi',
 );
 // Secciones de comparables: desde una línea "Comps" hasta "Terms"/"Photos" o el final. Sus direcciones no son la propiedad.
@@ -27,6 +27,33 @@ const COMPS_END_RE = /^[\s*•#-]*(?:terms?|t[eé]rminos|photos?|fotos|contact(?
 const SOLD_LINE_RE = /\b(?:sold|vendid[ao])\b/i;
 // Palabras que indican que el "número + palabras" no es una calle (p. ej. "2 family home on quiet street").
 const STREET_STOPWORDS = /\b(bed|beds|bd|br|bath|baths|ba|car|garage|home|house|family|story|stories|units?|acres?|years?|with|on|the|and|for|in|of|to|near|close|from|quiet|corner|hab|baños|banos|casa|en|de|la|el|y|con|days?|min|minutes|blocks?|miles?)\b/i;
+
+const DIR_SET = new Set(DIRS.toLowerCase().split('|'));
+const SUFFIX_SET = new Set(SUFFIXES.toLowerCase().split('|'));
+const ROUTE_RE = new RegExp(String.raw`^(?:(?:${DIRS})\.?\s+)?(?:A1A|US\b|State Road|SR\s*\d|Federal Hwy|Dixie Hwy)`, 'i');
+// Nombres de calle reales de 1-2 letras (artículos y abreviaturas) que no son ruido de OCR
+const NOMBRE_CORTO_OK = new Set(['la', 'le', 'el', 'de', 'du', 'di', 'da', 'lo', 'st', 'mt', 'ft']);
+
+/**
+ * ¿La dirección tiene un nombre de calle creíble? Filtra el ruido del OCR de los flyers ("1 Sr", "4 Rd",
+ * "20 Od Gal Rd SE", "5 Ie Le RF A St"). Nombre = lo que queda sin número, unidad, cardinales de los extremos
+ * ni el sufijo final. Válido: una sola letra (calles de Lake Worth: "211 N E St"), ordinales ("20th"),
+ * o palabras de 3+ letras (se admiten artículos como "La", "De").
+ */
+export function esCalleValida(street) {
+  const resto = String(street || '').replace(/\s*,?\s*(?:Unit|Apt|Apartment|Suite|Ste|#).*$/i, '').trim()
+    .replace(/^\d{1,6}[A-Za-z]?\s+/, '');
+  if (ROUTE_RE.test(resto)) return true;
+  const toks = resto.replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
+  if (toks.length && DIR_SET.has(toks[0].toLowerCase()) && toks.length > 2) toks.shift();
+  if (toks.length && DIR_SET.has(toks.at(-1).toLowerCase()) && toks.length > 2) toks.pop();
+  if (toks.length && SUFFIX_SET.has(toks.at(-1).toLowerCase())) toks.pop();
+  if (!toks.length) return false;
+  if (toks.length === 1 && /^[A-Za-z]$/.test(toks[0])) return true;
+  const ordinal = (t) => /^\d+(?:st|nd|rd|th)$/i.test(t);
+  return toks.every((t) => ordinal(t) || /^[A-Za-z'-]{3,}$/.test(t) || NOMBRE_CORTO_OK.has(t.toLowerCase()))
+    && toks.some((t) => ordinal(t) || /[A-Za-z]{3,}/.test(t));
+}
 
 const ZIP_RE = /\b(3[234]\d{3})(?:-\d{4})?\b/g;
 const PHONE_RE = /(?<![\d$])(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})(?!\d)/g;
@@ -214,6 +241,7 @@ export function findAddresses(text) {
     const nameWords = m[2] || '';
     if (STREET_STOPWORDS.test(nameWords)) continue;
     if (/^\d{4}$/.test(m[1]) && /^(19|20)/.test(m[1]) && !/\s/.test(nameWords.trim())) continue; // "2024 St" improbable
+    if (!esCalleValida(street)) continue; // ruido del OCR
     // Ciudad / estado / ZIP suelen venir justo después (misma línea o la siguiente)
     const tail = text.slice(m.index + m[0].length, m.index + m[0].length + 90).split('\n').slice(0, 2).join(' ');
     const zip = findZip(tail, { strict: false });

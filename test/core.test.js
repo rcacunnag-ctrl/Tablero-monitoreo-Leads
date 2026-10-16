@@ -643,3 +643,12 @@ test('modelo por PC: las órdenes de un PC llevan el modelo y esfuerzo configura
     config.tier1Modelos = antes;
   }
 });
+
+test('extracción: filtra direcciones basura del OCR y conserva las reales', async () => {
+  const { esCalleValida } = await import('../src/extract.js');
+  for (const b of ['1 Sr', '25 Sr', '4 rd', '20 od gal RD SE', '5 ie le RF a ST']) assert.equal(esCalleValida(b), false, b);
+  for (const ok of ['211 N E St', '407 N H St', '824 S F St', '1208 3rd Ave S', '814 42nd St West', '1731 SE 15th St #513',
+    '85 Flamingo Dr', '123 La Costa Dr', '100 SR 7', '2000 US Hwy 1', '300 A1A', '4500 N Federal Hwy']) assert.equal(esCalleValida(ok), true, ok);
+  const r = await ex('Flyer\n1 Sr Fort Lauderdale\n4 rd Hollywood FL\n441 NW 18th Ave, Fort Lauderdale, FL 33311 $435,000');
+  assert.deepEqual(r.listings.map((l) => l.street_address), ['441 NW 18th Ave']);
+});
