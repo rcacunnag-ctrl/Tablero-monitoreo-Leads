@@ -716,3 +716,32 @@ test('reposts y correcciones del wholesaler; "West Palm Beach" sin coma', async 
     { ...base, direccion: '1735 SE 15th St #514', clave_direccion: 'X2', fecha_mensaje: '2026-10-08T20:00:00Z' }]);
   assert.equal(r3.length, 2);
 });
+
+test('mercado: cola por dirección, validación del reporte y reintentos', async () => {
+  const { config } = await import('../src/config.js');
+  const m = await import('../src/mercado.js');
+  config.mercadoEjecutor = 'Roberto';
+  const [l] = await leadsMod.addLeads([{ estado: ESTADOS.nuevo, direccion: '7 Market St', ciudad: 'Jupiter', zip: '33458' }]);
+  const cola = async (e = 'Roberto') => (await m.listMercadoJobs({ ejecutor: e })).filter((j) => j.id === l.id);
+  assert.deepEqual((await cola())[0].direccion, '7 Market St, Jupiter, FL 33458');
+  assert.equal((await cola('Andres')).length, 0); // otro PC no recibe la cola
+  // Respuesta con basura: se normaliza
+  const out = await m.reportarMercado(l.id, { direccion: '7 Market St, Jupiter, FL 33458', motor: 'codex', resultado: {
+    estado: 'For sale', fecha_publicacion: '2026-08-14', precio_lista: '565000', precio_original: 600000, extra: 'x',
+    reducciones: [{ fecha: 'ayer', precio: 580000 }, { fecha: '2026-09-01', precio: 'no' }], fuentes: ['https://zillow.com/a', 'javascript:alert(1)'],
+    confianza: 'total', notas: 'x'.repeat(900) } });
+  assert.equal(out.mercado.precio_lista, 565000);
+  assert.deepEqual(out.mercado.reducciones, [{ fecha: null, precio: 580000 }]);
+  assert.deepEqual(out.mercado.fuentes, ['https://zillow.com/a']);
+  assert.equal(out.mercado.confianza, 'baja');
+  assert.equal(out.mercado.notas.length, 600);
+  assert.equal('extra' in out.mercado, false);
+  assert.equal((await cola()).length, 0);
+  // Si cambia la dirección vuelve a la cola; un reporte de la dirección vieja se ignora
+  await leadsMod.updateLead(l.id, { direccion: '9 Market St' });
+  assert.equal((await cola()).length, 1);
+  assert.ok((await m.reportarMercado(l.id, { direccion: '7 Market St, Jupiter, FL 33458', resultado: { estado: 'Sold' } })).ignorado);
+  // Tres errores: sale de la cola
+  for (let i = 0; i < 3; i++) await m.reportarMercado(l.id, { error: 'cupo' });
+  assert.equal((await cola()).length, 0);
+});

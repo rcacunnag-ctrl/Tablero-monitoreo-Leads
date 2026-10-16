@@ -100,7 +100,7 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
 | 1 | Pestaña **Descartados**: el lead queda 48 h (recuperable con usuario), luego se borra con sus informes; la dirección sigue bloqueada | hecho |
 | 2 | **Nuevo Propiedades / Nuevo Terrenos** (tipo `land` = terreno) | hecho |
 | 3 | Tier 1, Tier 2, Compra y Descartados: columna Tipo muestra **Terreno / Propiedad** | hecho |
-| 4 | Estado en el mercado (For sale / Contingent / Pending / Off market, fecha, reducciones, días). No requiere IA, pero Redfin bloquea las consultas automáticas (AWS WAF, 403 también desde el PC) | pendiente: elegir fuente |
+| 4 | Estado en el mercado (For sale / Contingent / Pending / Off market / Sold, fecha, precio, reducciones, días). Zillow, Redfin y Realtor bloquean consultas directas (403/429/captcha); RentCast no distingue Pending/Contingent. Solución: el runner del PC (MERCADO_EJECUTOR) consulta con **Codex `--search`** y, si falla, **Claude Haiku 5.5**; una vez por lead con dirección (al entrar o si cambia la dirección) | hecho |
 | 5 | Columna Contacto eliminada (el contacto sigue en la alerta y el detalle) | hecho |
 | 6 | Piñón ⚙️ para editar dirección, condado, precio, ARV, beds, baths, sqft y tipo en Nuevo; recalcula condado y criterios | hecho |
 | 7 | **% of ARV** con regla ≤ 75 % (+ precio < $300k, tope 3/día) | hecho |
@@ -188,3 +188,4 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - Pruebas: 32/32 en Linux.
 - 2026-10-16: las filas del panel alternan dos tonos (blanco y `#F2F6FB`; al pasar el mouse, `#E6EEF8`), con equivalentes para el modo oscuro. Aplica también a la vista pública.
 - 2026-10-16: Plan 3, pasos 1-3 y 5-7. `discardLead` pasa el lead a `papelera` (48 h; `purgarDescartados` cada hora borra lead e informes); `recuperarLead`; `editarLead` y `TIPOS`; `pctArv` reemplaza a `margenPct` (`pct_arv` en lugar de `margen_pct`, se migra al arrancar). Con los datos actuales ningún "No califica" pasa a cumplir con la regla nueva. Pruebas: 33 (32 + OCR solo en Linux).
+- 2026-10-16: Plan 3, paso 4. `src/mercado.js` tiene la cola (`GET /api/mercado-jobs?ejecutor=`, solo para MERCADO_EJECUTOR, por defecto TIER1_AUTO_EJECUTOR) y valida el reporte (`POST /api/mercado-jobs/:id/estado`), que guarda `lead.mercado` con la dirección consultada. Tras 3 errores con la misma dirección deja de consultarla. Runner: `Sync-Mercado` procesa 6 leads por corrida con su propio candado; Codex usa `--output-schema`. Panel: línea plegable debajo del precio con notas y fuentes; Excel: columnas `mercado_*`. Piloto: Codex tarda 13–33 s por lead y Haiku unos 49 s.

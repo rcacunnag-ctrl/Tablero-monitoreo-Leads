@@ -7,7 +7,7 @@ import { listLeads } from './leads.js';
 import { writeVista } from './vista.js';
 
 export const COLUMNS = [
-  'estado', 'alerta', 'pct_arv', 'criterio', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado',
+  'estado', 'alerta', 'pct_arv', 'criterio', 'mercado_estado', 'mercado_precio', 'mercado_publicado', 'mercado_dias', 'mercado_reducciones', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado',
   'inspeccion_se_hace', 'inspeccion_ejecutada', 'inspeccion_obs', 'inspeccion_usuario', 'inspeccion_en',
   'tier2_usuario', 'tier2_en', 'tier2_ejecutor', 'tier2_comparables', 'tier2_fase', 'tier2_estado', 'tier2_detalle', 'compra_usuario', 'compra_en', 'fecha_mensaje', 'grupo', 'autor', 'condado',
   'estado_direccion', 'direccion', 'ciudad', 'zip', 'direccion_verificada', 'metodo_condado',
@@ -16,6 +16,9 @@ export const COLUMNS = [
   'duplicado', 'mensaje_original', 'texto_ocr', 'imagenes_locales', 'id_mensaje', 'id', 'procesado_en',
 ];
 
+/** Campos del estado en el mercado (objeto `mercado`) como columnas planas. */
+const fila = (r) => ({ ...r, mercado_estado: r.mercado?.estado, mercado_precio: r.mercado?.precio_lista, mercado_publicado: r.mercado?.fecha_publicacion,
+  mercado_dias: r.mercado?.dias_en_mercado, mercado_reducciones: r.mercado?.reducciones?.length });
 const toCell = (v) => (v === null || v === undefined ? '' : Array.isArray(v) ? v.join('\n') : v);
 const csvLine = (vals) => vals.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',');
 
@@ -37,7 +40,7 @@ export async function exportOutputs() {
 }
 
 async function exportCsvXlsx() {
-  const rows = await listLeads();
+  const rows = (await listLeads()).map(fila);
   await fs.mkdir(path.dirname(config.csvFile), { recursive: true });
   const lines = [csvLine(COLUMNS), ...rows.map((r) => csvLine(COLUMNS.map((c) => toCell(r[c]))))];
   // BOM para que Excel muestre bien acentos y ñ
@@ -47,7 +50,7 @@ async function exportCsvXlsx() {
 
 /** Regenera propiedades.xlsx con los leads activos (filtros, encabezado fijo, estado resaltado). */
 export async function exportXlsx(file = config.xlsxFile) {
-  const rows = await listLeads();
+  const rows = (await listLeads()).map(fila);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Propiedades', { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.columns = COLUMNS.map((c) => ({ header: c, key: c, width: WIDTHS[c] || 14 }));

@@ -41,6 +41,8 @@ export const config = {
   // El primero es el predeterminado de las órdenes viejas; los Tier 1 automáticos van a TIER1_AUTO_EJECUTOR.
   ejecutores: list(process.env.EJECUTORES || 'Roberto,Andres'),
   tier1AutoEjecutor: (process.env.TIER1_AUTO_EJECUTOR || 'Andres').trim(),
+  // PC que consulta el estado en el mercado de los leads (Codex/Haiku en tier1-runner.ps1); por defecto, el de los Tier 1 automáticos
+  mercadoEjecutor: (process.env.MERCADO_EJECUTOR || process.env.TIER1_AUTO_EJECUTOR || 'Andres').trim(),
   // Modelo y esfuerzo del Tier 1 por PC: "Andres=claude-fable-5-1:medium,Roberto=..." (sin entrada = el
   // predeterminado de la cuenta de ese PC). Viaja en cada orden, así se cambia sin tocar el PC.
   tier1Modelos: Object.fromEntries(list(process.env.TIER1_MODELO_POR_PC || '').map((x) => {

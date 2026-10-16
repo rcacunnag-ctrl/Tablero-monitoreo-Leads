@@ -22,7 +22,7 @@ th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-a
 .e{border-radius:4px;padding:2px 6px;font-weight:600;font-size:12px;white-space:nowrap}
 .e.Nuevo{background:var(--nuevo)}.e.Pendiente{background:var(--pend)}.e.Revisar{background:var(--rev)}.e.No{background:var(--nc)}.e.T1{background:var(--t1)}.e.T2{background:var(--t2)}.e.Compra{background:var(--compra)}
 .alerta{margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--pend);font-size:12px}
-.pct.ok{color:var(--accent);font-weight:600}.clase{font-weight:600}button.gear{align-self:flex-end;border:0;background:none;padding:0 2px;font-size:16px;line-height:1}
+.pct.ok{color:var(--accent);font-weight:600}.mk{margin-top:4px;max-width:260px}.mk summary{font-size:12px;color:var(--muted)}.mk summary.on{color:var(--accent);font-weight:600}.mk a{font-size:12px;margin-right:6px}.clase{font-weight:600}button.gear{align-self:flex-end;border:0;background:none;padding:0 2px;font-size:16px;line-height:1}
 .acc{display:flex;flex-direction:column;gap:6px;min-width:120px}
 details summary{cursor:pointer;color:var(--muted)}pre{white-space:pre-wrap;max-width:420px;margin:6px 0}.m{color:var(--muted);font-size:12px}
 td img{max-height:60px;border-radius:4px;margin-right:4px}
@@ -119,6 +119,23 @@ function detalle(r){const d=[];
  else if(r.tier2_detalle)d.push('<i>'+esc(r.tier2_detalle)+'</i>');
  if(r.compra_usuario)d.push('Compra: '+esc(r.compra_usuario)+' '+fecha(r.compra_en));
  return d.map(x=>'<div class="m">'+x+'</div>').join('')}
+// Estado en el mercado (lo consulta el PC con Codex/Haiku al entrar el lead): For sale · $565k · 63 d · Aug 14 · −2 ↓$50k
+const dirMercado=r=>[r.direccion,r.ciudad,['FL',r.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+const kUsd=n=>n>=1e6?'$'+(Math.round(n/1e4)/100)+'M':n>=1e4?'$'+Math.round(n/1e3)+'k':'$'+Number(n).toLocaleString('en-US');
+const diaMes=s=>{const d=new Date(s+'T12:00:00');return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'short',day:'numeric'})};
+function mercado(r){if(!r.direccion)return '';const m=r.mercado;
+ if(!m||m.direccion!==dirMercado(r))return '<div class="m">Mercado: '+(r.mercado_error&&r.mercado_error.direccion===dirMercado(r)&&r.mercado_error.intentos>=3?'sin dato':'en consulta…')+'</div>';
+ const activo=['For sale','Contingent','Pending'].includes(m.estado),red=(m.reducciones||[]).length;
+ const dias=activo&&m.fecha_publicacion?Math.max(0,Math.round((Date.now()-new Date(m.fecha_publicacion+'T12:00:00'))/864e5)):m.dias_en_mercado;
+ const baja=m.precio_original&&m.precio_lista&&m.precio_original>m.precio_lista?m.precio_original-m.precio_lista:0;
+ const p=[m.estado==='Unknown'?'Sin listado confirmado':m.estado];
+ if(m.precio_lista)p.push((activo?'':'último ')+kUsd(m.precio_lista));
+ if(dias!=null)p.push(dias+' d');
+ if(m.fecha_publicacion)p.push(diaMes(m.fecha_publicacion));
+ if(red||baja)p.push('−'+(red||1)+(baja?' ↓'+kUsd(baja):''));
+ if(m.en_alquiler)p.push('en alquiler '+kUsd(m.en_alquiler)+'/mes');
+ return '<details class="mk"><summary class="'+(activo?'on':'')+'">'+esc(p.join(' · '))+'</summary><div class="m">'+esc(m.notas)+' <i>(confianza '+esc(m.confianza)+', '+esc(m.motor||'')+' '+fecha(m.consultado_en)+')</i></div>'
+  +(m.fuentes||[]).map(u=>'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(u.replace(/^https?:[/][/](www[.])?/,'').split('/')[0])+'</a>').join('')+'</details>'}
 const fullAddr=r=>[r.direccion,r.ciudad,(r.ciudad||r.zip)&&r.direccion?'FL '+(r.zip||''):r.zip].filter(Boolean).join(', ').trim()||'—';
 // Fecha del mensaje como "Friday, Oct 16"
 const fechaCorta=s=>{const d=new Date(s);return isNaN(d)?esc(s||''):esc(d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}))};
@@ -152,7 +169,7 @@ function actions(r){if(RO)return '';const b=[],btn=(a,t,c)=>'<button class="'+(c
 function render(){const e=$('estado').value,c=$('condado').value,dup=$('dup').value,q=$('q').value.toLowerCase(),nuevoTab=!!TABS[tab].t;
  $('tabs').innerHTML=Object.keys(TABS).map(t=>'<button class="tab'+(t===tab?' on':'')+'" data-tab="'+t+'">'+t+'<b>'+all.filter(r=>enTab(r,t)).length+'</b></button>').join('');
  const f=all.filter(r=>enTab(r,tab)&&(!e||r.estado===e)&&(!c||r.condado===c)&&(!dup||r.duplicado==='NO')&&(!q||JSON.stringify(r).toLowerCase().includes(q)));
- $('rows').innerHTML=f.map(r=>'<tr><td><span class="e '+esc(cls(r.estado))+'">'+esc(r.estado)+'</span>'+informe(r)+archivos(r)+detalle(r)+'</td><td class="m">'+fechaCorta(r.fecha_mensaje)+'</td><td>'+esc(r.condado||'—')+'<div class="m">'+esc(r.metodo_condado||'')+'</div></td><td>'+esc(fullAddr(r))+(fullAddr(r)!=='—'?'<div><button class="lnk" data-map="'+r.id+'">📍 Ver mapa</button></div>'+portales(r):'')+'<div class="m">'+esc(r.estado_direccion)+'</div>'+(r.duplicado&&r.duplicado!=='NO'?'<div class="m">Duplicado</div>':'')+(r.alerta?'<div class="alerta">⚠ '+esc(r.alerta)+(r.contacto||r.telefono?': '+esc(r.contacto||r.autor||'')+' '+(r.telefono?'<a href="tel:'+esc(r.telefono)+'">'+esc(r.telefono)+'</a>':''):'')+'</div>':'')+'</td><td>'+money(r.precio_usd)+(r.arv_usd?'<div class="m">ARV '+money(r.arv_usd)+'</div>':'')+(pct(r)!==null?'<div class="m pct'+(pct(r)<=PCT_MAX?' ok':'')+'">'+pct(r)+'% of ARV</div>':'')+'</td><td>'+esc([r.beds,r.baths].some(x=>x!=null&&x!=='')?(r.beds??'?')+'/'+(r.baths??'?'):'')+'<div class="m">'+esc(r.sqft?r.sqft+' sqft':'')+'</div></td><td>'+(nuevoTab?esc(tipoEs(r.tipo)):'<span class="clase">'+(esTerreno(r)?'Terreno':'Propiedad')+'</span>'+(r.tipo&&!esTerreno(r)?'<div class="m">'+esc(tipoEs(r.tipo))+'</div>':''))+'<div class="m">'+esc(r.tipo_negocio)+'</div></td><td class="m">'+esc(r.grupo)+'<br>'+esc(r.autor)+'</td><td><details><summary>'+esc(r.resumen)+'</summary><pre>'+esc(r.mensaje_original)+'</pre>'+(r.imagenes_locales||[]).map(p=>'<img src="'+MEDIA+encodeURIComponent(String(p).split(/[\\\\/]/).pop())+'">').join('')+' '+links(r.links_fotos)+' '+links(r.links_portales)+'</details></td>'+(RO?'':'<td>'+actions(r)+'</td>')+'</tr>').join('')||'<tr><td colspan="10" class="m">Sin resultados</td></tr>'}
+ $('rows').innerHTML=f.map(r=>'<tr><td><span class="e '+esc(cls(r.estado))+'">'+esc(r.estado)+'</span>'+informe(r)+archivos(r)+detalle(r)+'</td><td class="m">'+fechaCorta(r.fecha_mensaje)+'</td><td>'+esc(r.condado||'—')+'<div class="m">'+esc(r.metodo_condado||'')+'</div></td><td>'+esc(fullAddr(r))+(fullAddr(r)!=='—'?'<div><button class="lnk" data-map="'+r.id+'">📍 Ver mapa</button></div>'+portales(r):'')+'<div class="m">'+esc(r.estado_direccion)+'</div>'+(r.duplicado&&r.duplicado!=='NO'?'<div class="m">Duplicado</div>':'')+(r.alerta?'<div class="alerta">⚠ '+esc(r.alerta)+(r.contacto||r.telefono?': '+esc(r.contacto||r.autor||'')+' '+(r.telefono?'<a href="tel:'+esc(r.telefono)+'">'+esc(r.telefono)+'</a>':''):'')+'</div>':'')+'</td><td>'+money(r.precio_usd)+(r.arv_usd?'<div class="m">ARV '+money(r.arv_usd)+'</div>':'')+(pct(r)!==null?'<div class="m pct'+(pct(r)<=PCT_MAX?' ok':'')+'">'+pct(r)+'% of ARV</div>':'')+mercado(r)+'</td><td>'+esc([r.beds,r.baths].some(x=>x!=null&&x!=='')?(r.beds??'?')+'/'+(r.baths??'?'):'')+'<div class="m">'+esc(r.sqft?r.sqft+' sqft':'')+'</div></td><td>'+(nuevoTab?esc(tipoEs(r.tipo)):'<span class="clase">'+(esTerreno(r)?'Terreno':'Propiedad')+'</span>'+(r.tipo&&!esTerreno(r)?'<div class="m">'+esc(tipoEs(r.tipo))+'</div>':''))+'<div class="m">'+esc(r.tipo_negocio)+'</div></td><td class="m">'+esc(r.grupo)+'<br>'+esc(r.autor)+'</td><td><details><summary>'+esc(r.resumen)+'</summary><pre>'+esc(r.mensaje_original)+'</pre>'+(r.imagenes_locales||[]).map(p=>'<img src="'+MEDIA+encodeURIComponent(String(p).split(/[\\\\/]/).pop())+'">').join('')+' '+links(r.links_fotos)+' '+links(r.links_portales)+'</details></td>'+(RO?'':'<td>'+actions(r)+'</td>')+'</tr>').join('')||'<tr><td colspan="10" class="m">Sin resultados</td></tr>'}
 async function post(id,a,body){const res=await fetch('/api/leads/'+id+'/'+a,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor':'1'},body:JSON.stringify(body||{})});
  const d=await res.json().catch(()=>({}));if(!res.ok)throw new Error(d.error||'Error '+res.status);return d}
 // Muestra un grupo de campos; los ocultos se deshabilitan para que no viajen en el formulario.

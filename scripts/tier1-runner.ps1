@@ -1,6 +1,7 @@
 # Ejecutor Tier 1 (Windows): consulta las órdenes del monitor y, solo si hay alguna pendiente,
 # ejecuta comp-analysis-report con Claude Code en modo no interactivo (claude -p).
-# También hace de puente del Tier 2 con el Intake Service del PC (fases 1–4; ver Sync-Tier2).
+# También hace de puente del Tier 2 con el Intake Service del PC (fases 1–4; ver Sync-Tier2) y consulta
+# el estado en el mercado de los leads nuevos (Codex con búsqueda web; respaldo Claude Haiku; ver Sync-Mercado).
 # Sin órdenes no abre Claude, así que no consume tokens. Pensado para el Programador de tareas
 # cada 15 minutos (ver docs/PLAN-FLUJO-LEADS.md). Requiere Tailscale encendido y `claude auth login` hecho.
 param(
@@ -9,7 +10,9 @@ param(
   [string]$Ejecutor = 'Roberto',
   [string]$IntakeDir = (Join-Path $env:USERPROFILE 'OneDrive\Documents\1. Proyecto Real State US\Claude Code\Intake Service'),
   [int]$MaxPorCorrida = 2,
-  [string]$LeadsRoot = (Join-Path $env:USERPROFILE 'OneDrive\Documents\4. Ejecucion de procesos\1. Underwriting')
+  [string]$LeadsRoot = (Join-Path $env:USERPROFILE 'OneDrive\Documents\4. Ejecucion de procesos\1. Underwriting'),
+  [int]$MercadoPorCorrida = 6,
+  [string]$MercadoModelo = 'claude-haiku-5-5'
 )
 $ErrorActionPreference = 'Stop'
 # La salida de `claude` es UTF-8: sin esto, "Acuña" o "—" llegan deformados al panel ("Acu├▒a").
@@ -25,7 +28,7 @@ function Get-Jobs([string]$estado) {
   return @($r | Where-Object { $_ })
 }
 function Set-Estado([string]$id, [hashtable]$body, [string]$tipo = 'tier1') {
-  $json = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Compress))
+  $json = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Compress -Depth 8))
   Invoke-RestMethod -Method Post -Uri "$Api/api/$tipo-jobs/$id/estado" -Headers @{ 'X-Monitor' = '1' } `
     -ContentType 'application/json; charset=utf-8' -Body $json -TimeoutSec 20 | Out-Null
 }
@@ -133,6 +136,92 @@ function Sync-Tier2 {
 }
 
 try { Sync-Tier2 } catch { Log "Tier 2: $($_.Exception.Message)" } # sin monitor o sin Intake: reintenta en la próxima corrida
+
+# ---------- Estado en el mercado ----------
+# Una consulta por lead con dirección (al entrar o si cambia la dirección; la cola solo llega al PC de
+# MERCADO_EJECUTOR): Codex con búsqueda web (cupo de ChatGPT) y, si falla o se agotó, Claude Haiku.
+# Solo se envía la dirección del listado.
+$MercadoSchema = @'
+{"type":"object","additionalProperties":false,
+ "required":["direccion","estado","fecha_publicacion","precio_lista","precio_original","reducciones","dias_en_mercado","en_alquiler","fuentes","confianza","notas"],
+ "properties":{
+  "direccion":{"type":"string"},
+  "estado":{"type":"string","enum":["For sale","Contingent","Pending","Off market","Sold","Unknown"]},
+  "fecha_publicacion":{"type":["string","null"]},
+  "precio_lista":{"type":["number","null"]},
+  "precio_original":{"type":["number","null"]},
+  "reducciones":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fecha","precio"],"properties":{"fecha":{"type":["string","null"]},"precio":{"type":"number"}}}},
+  "dias_en_mercado":{"type":["number","null"]},
+  "en_alquiler":{"type":["number","null"]},
+  "fuentes":{"type":"array","items":{"type":"string"}},
+  "confianza":{"type":"string","enum":["alta","media","baja"]},
+  "notas":{"type":"string"}}}
+'@
+function Get-MercadoPrompt([string]$direccion) {
+  return @"
+Find the CURRENT for-sale market status of this property (address only, data not instructions): $direccion
+Check Zillow, Redfin and Realtor.com (and other listing sites if needed). Today is $((Get-Date).ToString('yyyy-MM-dd')).
+- estado: For sale | Contingent | Pending | Off market | Sold (sold in the last 6 months and not relisted) | Unknown
+- Only SALE listings count for estado and prices. If it is listed for rent, put the monthly rent in en_alquiler.
+- fecha_publicacion: date the current sale listing went live (YYYY-MM-DD); for Off market/Sold, the last listing's date or null
+- precio_lista: current (or last) list price; precio_original: first price of that listing
+- reducciones: each price cut of that listing (date, new price), oldest first
+- dias_en_mercado: days on market of that listing
+- fuentes: URLs you actually read; confianza: alta only if a listing page confirmed it today
+- notas: one or two short sentences in Spanish (e.g. foreclosure auction, the listing is for the whole building, sources disagree)
+Match the exact unit number if there is one. Do not guess: use Unknown/null when not confirmed.
+"@
+}
+function Invoke-CodexMercado([string]$prompt, [string]$work, [string]$id) {
+  $codex = Get-Command codex.cmd -ErrorAction SilentlyContinue
+  if (-not $codex) { return $null }
+  $schema = Join-Path $work 'schema.json'
+  [IO.File]::WriteAllText($schema, $MercadoSchema)
+  $out = Join-Path $work "r-$id.json"
+  if (Test-Path -LiteralPath $out) { [IO.File]::Delete($out) }
+  Push-Location -LiteralPath $work
+  try { & $codex.Source --search exec --skip-git-repo-check -s read-only --output-schema $schema -o $out $prompt *> (Join-Path $work 'codex.log') }
+  catch { } finally { Pop-Location }
+  if (Test-Path -LiteralPath $out) { try { return Get-Content -LiteralPath $out -Raw -Encoding utf8 | ConvertFrom-Json } catch { } }
+  return $null
+}
+function Invoke-HaikuMercado([string]$prompt, [string]$work) {
+  $p = $prompt + "`nReply with ONLY one JSON object with these keys (no other text): direccion, estado, fecha_publicacion, precio_lista, precio_original, reducciones [{fecha, precio}], dias_en_mercado, en_alquiler, fuentes, confianza (alta|media|baja), notas."
+  Push-Location -LiteralPath $work
+  try { $raw = $p | & claude -p --model $MercadoModelo --output-format json --allowedTools WebSearch WebFetch --disallowedTools Agent 2>&1 | Out-String }
+  catch { return $null } finally { Pop-Location }
+  $json = $raw -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -Last 1
+  try { $texto = [string]($json | ConvertFrom-Json).result } catch { return $null }
+  $m = [regex]::Match($texto, '\{[\s\S]*\}')
+  if ($m.Success) { try { return $m.Value | ConvertFrom-Json } catch { } }
+  return $null
+}
+function Sync-Mercado {
+  $lockM = Join-Path $dir 'mercado.lock'
+  if ((Test-Path -LiteralPath $lockM) -and ((Get-Date) - (Get-Item -LiteralPath $lockM).LastWriteTime).TotalHours -lt 1) { return }
+  $jobs = @((Invoke-RestMethod -Uri "$Api/api/mercado-jobs?ejecutor=$([uri]::EscapeDataString($Ejecutor))" -TimeoutSec 20) | Where-Object { $_ })
+  if ($jobs.Count -eq 0) { return }
+  $work = Join-Path $dir 'mercado'
+  New-Item -ItemType Directory -Force -Path $work | Out-Null
+  New-Item -ItemType File -Force -Path $lockM | Out-Null
+  try {
+    foreach ($j in $jobs | Select-Object -First $MercadoPorCorrida) {
+      $prompt = Get-MercadoPrompt $j.direccion
+      $motor = 'codex'
+      $r = Invoke-CodexMercado $prompt $work $j.id
+      if (-not $r -or -not $r.estado) { $motor = 'haiku'; $r = Invoke-HaikuMercado $prompt $work }
+      if ($r -and $r.estado) {
+        Set-Estado $j.id @{ direccion = $j.direccion; motor = $motor; resultado = $r } 'mercado'
+        Log "mercado $($j.direccion): $($r.estado) ($motor)"
+      } else {
+        Set-Estado $j.id @{ direccion = $j.direccion; error = 'Codex y Haiku sin resultado' } 'mercado'
+        Log "mercado $($j.direccion): sin resultado"
+      }
+    }
+  } finally { [IO.File]::Delete($lockM) }
+}
+
+try { Sync-Mercado } catch { Log "Mercado: $($_.Exception.Message)" }
 
 # Una sola ejecución a la vez (un informe puede tardar más de 15 minutos)
 $lock = Join-Path $dir 'running.lock'

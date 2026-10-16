@@ -10,6 +10,7 @@ import { exportXlsx, exportOutputs } from './sink.js';
 import { listLeads, listPapelera } from './leads.js';
 import { descartar, recuperar, editarLead, TIPOS, pasarATier1, agregarDireccion, agregarPrecio, reportarInforme, registrarInspeccion, avanzar, pasarATier2, reportarTier2, reintentarTier2Lead } from './actions.js';
 import { listTier2Jobs } from './tier2.js';
+import { listMercadoJobs, reportarMercado } from './mercado.js';
 import { listJobs } from './tier1.js';
 import { migrateLegacy } from './migrate.js';
 import { PAGE } from './page.js';
@@ -43,6 +44,8 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
         }
         const job = url.pathname.match(/^\/api\/tier1-jobs\/([\w-]+)\/estado$/);
         if (job) return send(res, 200, 'application/json', JSON.stringify(await reportarInforme(job[1], await readJson(req))));
+        const job3 = url.pathname.match(/^\/api\/mercado-jobs\/([\w-]+)\/estado$/);
+        if (job3) return send(res, 200, 'application/json', JSON.stringify(await reportarMercado(job3[1], await readJson(req))));
         const job2 = url.pathname.match(/^\/api\/tier2-jobs\/([\w-]+)\/estado$/);
         if (job2) return send(res, 200, 'application/json', JSON.stringify(await reportarTier2(job2[1], await readJson(req))));
         const m = url.pathname.match(/^\/api\/leads\/([\w-]+)\/(descartar|recuperar|editar|tier1|direccion|precio|inspeccion|tier2|reintentar2|compra)$/);
@@ -57,6 +60,9 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
       }
       if (url.pathname === '/api/tier1-jobs') {
         return send(res, 200, 'application/json', JSON.stringify(await listJobs({ estado: url.searchParams.get('estado') || undefined, ejecutor: url.searchParams.get('ejecutor') || undefined })));
+      }
+      if (url.pathname === '/api/mercado-jobs') {
+        return send(res, 200, 'application/json', JSON.stringify(await listMercadoJobs({ ejecutor: url.searchParams.get('ejecutor') || undefined })));
       }
       if (url.pathname === '/api/tier2-jobs') {
         return send(res, 200, 'application/json', JSON.stringify(await listTier2Jobs({ estado: url.searchParams.get('estado') || undefined, ejecutor: url.searchParams.get('ejecutor') || undefined })));
