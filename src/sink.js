@@ -7,7 +7,7 @@ import { listLeads } from './leads.js';
 import { writeVista } from './vista.js';
 
 export const COLUMNS = [
-  'estado', 'alerta', 'margen_pct', 'criterio', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado',
+  'estado', 'alerta', 'pct_arv', 'criterio', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado',
   'inspeccion_se_hace', 'inspeccion_ejecutada', 'inspeccion_obs', 'inspeccion_usuario', 'inspeccion_en',
   'tier2_usuario', 'tier2_en', 'tier2_ejecutor', 'tier2_comparables', 'tier2_fase', 'tier2_estado', 'tier2_detalle', 'compra_usuario', 'compra_en', 'fecha_mensaje', 'grupo', 'autor', 'condado',
   'estado_direccion', 'direccion', 'ciudad', 'zip', 'direccion_verificada', 'metodo_condado',

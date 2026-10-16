@@ -1,5 +1,5 @@
-// Almacén de leads activos: data/leads.json. Los descartados se borran; solo queda su dirección
-// normalizada en `descartados` para que no vuelvan a entrar si se republican.
+// Almacén de leads activos: data/leads.json. Los descartados pasan 48 h a `papelera` (recuperables) y luego
+// se borran; su dirección normalizada queda en `descartados` para que no vuelvan a entrar si se republican.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -39,6 +39,7 @@ export async function loadLeads() {
   }
   db.leads ||= [];
   db.descartados ||= {};
+  db.papelera ||= [];
   return db;
 }
 
@@ -115,14 +116,53 @@ export function updateLead(id, patch) {
   });
 }
 
-/** Borra el lead. Conserva solo su dirección normalizada para que no reingrese. */
-export function discardLead(id, motivo = 'usuario') {
+/** Horas que un lead descartado queda en la papelera (pestaña Descartados) antes de borrarse. */
+export const HORAS_PAPELERA = 48;
+
+/**
+ * Saca el lead de los activos y lo deja en la papelera 48 h (se puede recuperar). Su dirección
+ * normalizada queda bloqueada para que no reingrese si se republica.
+ */
+export function discardLead(id, motivo = 'usuario', usuario = '') {
   return withLeads((data) => {
     const i = data.leads.findIndex((l) => l.id === id);
     if (i < 0) throw notFound(id);
     const [lead] = data.leads.splice(i, 1);
-    if (lead.clave_direccion) data.descartados[lead.clave_direccion] = { en: new Date().toISOString(), motivo };
+    const en = new Date().toISOString();
+    if (lead.clave_direccion) data.descartados[lead.clave_direccion] = { en, motivo };
+    data.papelera.push({ ...lead, descartado_en: en, descartado_motivo: motivo, descartado_por: usuario });
     return lead;
+  });
+}
+
+export async function listPapelera() {
+  return (await loadLeads()).papelera;
+}
+
+/** Devuelve un lead de la papelera a los activos, en la etapa en que estaba, y desbloquea su dirección. */
+export function recuperarLead(id, usuario) {
+  return withLeads((data) => {
+    const i = data.papelera.findIndex((l) => l.id === id);
+    if (i < 0) throw notFound(id);
+    const clave = data.papelera[i].clave_direccion;
+    const otro = clave && data.leads.find((l) => l.clave_direccion === clave);
+    if (otro) throw Object.assign(new Error(`Ya hay un lead activo con esa dirección (${otro.estado})`), { status: 409 });
+    const [{ descartado_en, descartado_motivo, descartado_por, ...lead }] = data.papelera.splice(i, 1);
+    if (clave) delete data.descartados[clave];
+    lead.recuperado = { en: new Date().toISOString(), usuario, descartado_en, motivo: descartado_motivo };
+    lead.actualizado_en = lead.recuperado.en;
+    data.leads.push(lead);
+    return lead;
+  });
+}
+
+/** Borra de la papelera los descartados hace más de 48 h. Devuelve sus id (para borrar sus informes). */
+export function purgarPapelera(ahora = Date.now()) {
+  return withLeads((data) => {
+    const limite = ahora - HORAS_PAPELERA * 36e5;
+    const vencidos = data.papelera.filter((l) => new Date(l.descartado_en) < limite).map((l) => l.id);
+    data.papelera = data.papelera.filter((l) => !vencidos.includes(l.id));
+    return vencidos;
   });
 }
 

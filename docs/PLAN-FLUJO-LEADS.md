@@ -71,7 +71,7 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
 |---|---|
 | C1 | Condados: Palm Beach, Broward y Martin (ya existía; R4/R5) |
 | C2 | Margen = (ARV − precio) / ARV × 100 |
-| C3 | **Tier 1 automático** si el margen es **≥ 60 %** y el precio es **< $300,000**. Si no cumple, queda **"No califica"** con el motivo, en la pestaña Nuevo, y se puede pasar a Tier 1 a mano. Sin precio o sin ARV queda Nuevo con la alerta "Solicitar … al wholesaler" |
+| C3 | **Tier 1 automático** si **% of ARV = precio / ARV × 100 ≤ 75 %** (hasta el 2026-10-16: margen ≥ 60 %) y el precio es **< $300,000**. Si no cumple, queda **"No califica"** con el motivo, en la pestaña Nuevo, y se puede pasar a Tier 1 a mano. Sin precio o sin ARV queda Nuevo con la alerta "Solicitar … al wholesaler" |
 | C4 | Tope de **3 informes Tier 1 automáticos por día** (zona America/New_York). Los que no caben esperan al día siguiente. Los Tier 1 manuales no tienen tope |
 | C5 | Los criterios se aplican a los leads que entran desde ahora, al agregar el precio y al confirmar una dirección en zona. Los leads anteriores no se reevalúan |
 | C6 | Tier 2 y Compra se activan con botones manuales. Tier 2 lanzará las fases 1–4 en el PC (Fase D) |
@@ -92,6 +92,18 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - informe Tier 1 listo o con error;
   - informes Tier 2 (comparables, alertas, decisión) al subirlos.
 - [x] **D. Tier 2 automático** con el Intake Service del PC (ver bitácora 2026-10-10)
+
+## Plan 3 (2026-10-16): actualizaciones del tablero
+
+| # | Cambio | Estado |
+|---|---|---|
+| 1 | Pestaña **Descartados**: el lead queda 48 h (recuperable con usuario), luego se borra con sus informes; la dirección sigue bloqueada | hecho |
+| 2 | **Nuevo Propiedades / Nuevo Terrenos** (tipo `land` = terreno) | hecho |
+| 3 | Tier 1, Tier 2, Compra y Descartados: columna Tipo muestra **Terreno / Propiedad** | hecho |
+| 4 | Estado en el mercado (For sale / Contingent / Pending / Off market, fecha, reducciones, días). No requiere IA, pero Redfin bloquea las consultas automáticas (AWS WAF, 403 también desde el PC) | pendiente: elegir fuente |
+| 5 | Columna Contacto eliminada (el contacto sigue en la alerta y el detalle) | hecho |
+| 6 | Piñón ⚙️ para editar dirección, condado, precio, ARV, beds, baths, sqft y tipo en Nuevo; recalcula condado y criterios | hecho |
+| 7 | **% of ARV** con regla ≤ 75 % (+ precio < $300k, tope 3/día) | hecho |
 
 ## Bitácora
 - 2026-10-06: plan creado. Decisiones: R6 = Census y, si no resuelve, Revisar condado. Dirección = número + calle. R7 = no reingresa.
@@ -175,3 +187,4 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
   - Revisión de las 30 direcciones con el Census para los enlaces de los portales: 28 coinciden, 814 se corrigió y 239 Gulfstream Blvd (Boynton Beach) no aparece en el Census; se dejó tal como la escribió el wholesaler.
   - Pruebas: 32/32 en Linux.
 - 2026-10-16: las filas del panel alternan dos tonos (blanco y `#F2F6FB`; al pasar el mouse, `#E6EEF8`), con equivalentes para el modo oscuro. Aplica también a la vista pública.
+- 2026-10-16: Plan 3, pasos 1-3 y 5-7. `discardLead` pasa el lead a `papelera` (48 h; `purgarDescartados` cada hora borra lead e informes); `recuperarLead`; `editarLead` y `TIPOS`; `pctArv` reemplaza a `margenPct` (`pct_arv` en lugar de `margen_pct`, se migra al arrancar). Con los datos actuales ningún "No califica" pasa a cumplir con la regla nueva. Pruebas: 33 (32 + OCR solo en Linux).

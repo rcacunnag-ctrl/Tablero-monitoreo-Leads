@@ -21,23 +21,23 @@ export function computeAlerta(lead) {
   return `Solicitar ${lista} al wholesaler`;
 }
 
-/** Margen del wholesaler: (ARV - precio) / ARV, en %. null si falta precio o ARV. */
-export function margenPct({ precio_usd: precio, arv_usd: arv }) {
+/** % of ARV: precio / ARV * 100 (1 decimal). null si falta precio o ARV. */
+export function pctArv({ precio_usd: precio, arv_usd: arv }) {
   if (!precio || !arv) return null;
-  return Math.round(((arv - precio) / arv) * 1000) / 10;
+  return Math.round((precio / arv) * 1000) / 10;
 }
 
 /**
- * Criterios de Tier 1 automático: margen >= critMargenMin y precio < critPrecioMax.
+ * Criterios de Tier 1 automático: % of ARV <= critPctArvMax y precio < critPrecioMax.
  * califica: true | false | null (falta precio o ARV). motivo: por qué no califica.
  */
 export function evaluarCriterios(lead) {
-  const margen = margenPct(lead);
-  if (margen === null) return { califica: null, margen, motivo: '' };
+  const pct = pctArv(lead);
+  if (pct === null) return { califica: null, pct, motivo: '' };
   const fallos = [];
-  if (margen < config.critMargenMin) fallos.push(`margen ${margen}% < ${config.critMargenMin}%`);
+  if (pct > config.critPctArvMax) fallos.push(`${pct}% of ARV > ${config.critPctArvMax}%`);
   if (lead.precio_usd >= config.critPrecioMax) fallos.push(`precio ≥ $${config.critPrecioMax.toLocaleString('en-US')}`);
-  return { califica: !fallos.length, margen, motivo: fallos.join(' y ') };
+  return { califica: !fallos.length, pct, motivo: fallos.join(' y ') };
 }
 
 export function inTargetCounty(county) {
@@ -92,7 +92,7 @@ export async function processPost(post, deps = {}) {
     out.rows.push({
       estado: decision.estado,
       alerta: computeAlerta({ estado: decision.estado, precio_usd: l.price_usd, arv_usd: l.arv_usd }),
-      margen_pct: margenPct({ precio_usd: l.price_usd, arv_usd: l.arv_usd }),
+      pct_arv: pctArv({ precio_usd: l.price_usd, arv_usd: l.arv_usd }),
       fecha_mensaje: post.timestamp,
       grupo: post.groupName,
       autor: post.sender,

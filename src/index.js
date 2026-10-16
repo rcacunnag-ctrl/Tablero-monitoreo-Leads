@@ -4,7 +4,7 @@ import { enqueuePost, ensureDirs, loadState } from './store.js';
 import { processInbox } from './process-inbox.js';
 import { startDashboard } from './dashboard.js';
 import { migrateLegacy } from './migrate.js';
-import { refreshAlertas } from './actions.js';
+import { refreshAlertas, purgarDescartados } from './actions.js';
 import { writeVista, startVista } from './vista.js';
 import { conectarNotificaciones, iniciarNotificaciones } from './notify.js';
 
@@ -18,6 +18,10 @@ await ensureDirs();
 if (!listOnly) {
   await migrateLegacy();
   await refreshAlertas();
+  // Descartados: se borran a las 48 h (la papelera se revisa cada hora)
+  const purgar = () => purgarDescartados().then((n) => n && console.log(`Descartados borrados (48 h): ${n}`)).catch((e) => console.error(`Papelera: ${e.message}`));
+  await purgar();
+  setInterval(purgar, 36e5).unref();
   startDashboard();
   await writeVista();
   startVista();

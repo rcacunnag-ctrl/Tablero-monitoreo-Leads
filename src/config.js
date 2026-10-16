@@ -32,8 +32,8 @@ export const config = {
   // Tier 1: usuarios que pueden ejecutar el comp-analysis-report y si el lanzamiento está activo
   tier1Users: list(process.env.TIER1_USERS || 'Andres,Carlos,Jaime'),
   tier1SkillEnabled: bool(process.env.TIER1_SKILL_ENABLED, false),
-  // Criterios de Tier 1 automático: margen (ARV - precio) / ARV >= CRIT_MARGEN_MIN % y precio < CRIT_PRECIO_MAX
-  critMargenMin: Number(process.env.CRIT_MARGEN_MIN || 60),
+  // Criterios de Tier 1 automático: % of ARV = precio / ARV * 100 <= CRIT_PCT_ARV_MAX y precio < CRIT_PRECIO_MAX
+  critPctArvMax: Number(process.env.CRIT_PCT_ARV_MAX || 75),
   critPrecioMax: Number(process.env.CRIT_PRECIO_MAX || 300000),
   // Informes Tier 1 automáticos que pueden empezar por día (los demás esperan al día siguiente)
   tier1AutoMaxDia: Number(process.env.TIER1_AUTO_MAX_DIA || 3),

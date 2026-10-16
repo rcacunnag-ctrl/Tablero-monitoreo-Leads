@@ -1,8 +1,8 @@
-// Acciones sobre un lead: descartar, Tier 1 (manual o por criterios), agregar dirección y precio,
-// inspección, Tier 2 y Compra.
+// Acciones sobre un lead: descartar y recuperar, Tier 1 (manual o por criterios), agregar dirección y precio,
+// editar, inspección, Tier 2 y Compra.
 import { config } from './config.js';
-import { ESTADOS, listLeads, updateLead, discardLead } from './leads.js';
-import { resolveManualAddress, computeAlerta, evaluarCriterios } from './pipeline.js';
+import { ESTADOS, listLeads, updateLead, discardLead, recuperarLead, purgarPapelera } from './leads.js';
+import { resolveManualAddress, computeAlerta, evaluarCriterios, pctArv } from './pipeline.js';
 import { lanzarCompAnalysis, setJobState } from './tier1.js';
 import { parseMoney } from './extract.js';
 import { exportOutputs } from './sink.js';
@@ -30,11 +30,25 @@ async function getLead(id) {
   return lead;
 }
 
-export async function descartar(id) {
-  await discardLead(id, 'usuario');
-  await borrarInformes(id);
+/** Pasa el lead a Descartados (48 h, recuperable). Sus informes se borran al vencer la papelera. */
+export async function descartar(id, usuario = '') {
+  await discardLead(id, 'usuario', usuario);
   await exportOutputs();
   return { ok: true, resultado: 'descartado' };
+}
+
+export async function recuperar(id, usuario) {
+  checkUser(usuario);
+  const lead = await recuperarLead(id, usuario);
+  await exportOutputs();
+  return { ok: true, resultado: 'recuperado', estado: lead.estado };
+}
+
+/** Borra los descartados de hace más de 48 h y sus informes. */
+export async function purgarDescartados(ahora = Date.now()) {
+  const ids = await purgarPapelera(ahora);
+  for (const id of ids) await borrarInformes(id);
+  return ids.length;
 }
 
 /**
@@ -63,7 +77,7 @@ export async function aplicarCriterios(id, usuario = USUARIO_AUTO) {
   const lead = await getLead(id);
   if (![ESTADOS.nuevo, ESTADOS.noCalifica].includes(lead.estado)) return { ok: true, resultado: 'sin_cambio' };
   const c = evaluarCriterios(lead);
-  await updateLead(id, { margen_pct: c.margen, criterio: c.motivo });
+  await updateLead(id, { pct_arv: c.pct, criterio: c.motivo });
   if (c.califica) return pasarATier1(id, usuario, { auto: true });
   const estado = c.califica === false ? ESTADOS.noCalifica : ESTADOS.nuevo;
   await updateLead(id, { estado, alerta: computeAlerta({ ...lead, estado }) });
@@ -77,7 +91,7 @@ export async function evaluarIngresados(leads, log = console) {
     try {
       if (lead.estado === ESTADOS.nuevo) {
         const r = await aplicarCriterios(lead.id);
-        if (r.resultado === 'tier1') log.log?.(`Tier 1 automático: ${lead.direccion} (margen ${lead.margen_pct}%)`);
+        if (r.resultado === 'tier1') log.log?.(`Tier 1 automático: ${lead.direccion} (${(await getLead(lead.id)).pct_arv}% of ARV)`);
       }
       if ((await getLead(lead.id)).alerta) await encolar('alerta', lead.id);
     } catch (err) {
@@ -111,13 +125,21 @@ export async function agregarPrecio(id, body, usuario) {
   return { ok: true, resultado: 'precio' };
 }
 
-/** Recalcula las alertas de todos los leads (al arrancar, por si cambian las reglas). */
+/** Recalcula alertas, % of ARV y motivo de No califica de todos los leads (al arrancar, por si cambian las reglas). */
 export async function refreshAlertas() {
   let n = 0;
   for (const lead of await listLeads()) {
+    const patch = {};
     const alerta = computeAlerta(lead);
-    if (alerta !== (lead.alerta || '')) {
-      await updateLead(lead.id, { alerta });
+    if (alerta !== (lead.alerta || '')) patch.alerta = alerta;
+    const pct = pctArv(lead);
+    if (pct !== (lead.pct_arv ?? null) || 'margen_pct' in lead) Object.assign(patch, { pct_arv: pct, margen_pct: undefined });
+    if (lead.estado === ESTADOS.noCalifica) {
+      const { motivo } = evaluarCriterios(lead);
+      if (motivo && motivo !== lead.criterio) patch.criterio = motivo;
+    }
+    if (Object.keys(patch).length) {
+      await updateLead(lead.id, patch);
       n++;
     }
   }
@@ -175,6 +197,76 @@ export async function agregarDireccion(id, direccion, usuario, deps = {}) {
   }
   const out = await aplicarCriterios(id, usuario);
   return { ...out, condado: geo.county };
+}
+
+/** Tipos de propiedad (como los guarda la extracción; el panel los muestra en español). */
+export const TIPOS = ['single_family', 'condo', 'townhouse', 'multifamily', 'land', 'commercial', 'mobile_home', 'other', 'unknown'];
+const EDITABLES = [ESTADOS.nuevo, ESTADOS.pendienteDireccion, ESTADOS.revisarCondado, ESTADOS.noCalifica];
+const numero = (v, campo) => {
+  const t = String(v ?? '').trim().replace(/,/g, '');
+  if (!t) return null;
+  const n = Number(t);
+  if (!(n >= 0)) throw badRequest(`${campo} no válido: "${v}"`);
+  return n;
+};
+
+/**
+ * Edita los datos de un lead en Nuevo (piñón del panel). Si cambia la dirección se vuelve a verificar el
+ * condado (fuera de zona -> Descartados); si cambian precio, ARV o la etapa se recalculan los criterios.
+ */
+export async function editarLead(id, body, usuario, deps = {}) {
+  checkUser(usuario);
+  const lead = await getLead(id);
+  if (!EDITABLES.includes(lead.estado)) throw badRequest('Solo se editan leads en Nuevo');
+  const txt = (k) => String(body[k] ?? '').trim();
+  const patch = {
+    precio_usd: txt('precio_usd') ? money(body.precio_usd) : null,
+    arv_usd: txt('arv_usd') ? money(body.arv_usd) : null,
+    beds: numero(body.beds, 'Beds'),
+    baths: numero(body.baths, 'Baths'),
+    sqft: numero(body.sqft, 'Sqft'),
+  };
+  if (txt('tipo')) {
+    if (!TIPOS.includes(txt('tipo'))) throw badRequest(`Tipo no válido. Opciones: ${TIPOS.join(', ')}`);
+    patch.tipo = txt('tipo');
+  }
+  let estado = lead.estado;
+  const calle = txt('calle'), ciudad = txt('ciudad'), zip = txt('zip'), condado = txt('condado');
+  if (!calle && lead.direccion) throw badRequest('La dirección no puede quedar vacía');
+  if (calle && (calle !== (lead.direccion || '') || ciudad !== (lead.ciudad || '') || zip !== (lead.zip || ''))) {
+    const { listing, geo, key, enZona } = await resolveManualAddress({ calle, ciudad, zip }, deps);
+    Object.assign(patch, {
+      direccion: listing.street_address, ciudad: listing.city || geo.city || null, zip: listing.zip || geo.zip || null,
+      condado: geo.county, metodo_condado: geo.method, direccion_verificada: geo.matchedAddress,
+      estado_direccion: listing.city || listing.zip ? 'COMPLETA' : 'PARCIAL', clave_direccion: key, direccion_manual: true,
+    });
+    if (enZona === false) {
+      await updateLead(id, patch);
+      await discardLead(id, `fuera de condado (${geo.county})`, usuario);
+      await exportOutputs();
+      return { ok: true, resultado: 'descartado', condado: geo.county };
+    }
+    estado = enZona ? (estado === ESTADOS.noCalifica ? estado : ESTADOS.nuevo) : ESTADOS.revisarCondado;
+  }
+  // Condado a mano: solo si no lo resolvió la dirección
+  const geoCondado = 'condado' in patch && patch.condado;
+  if (condado && !geoCondado && ('condado' in patch || condado !== (lead.condado || ''))) {
+    if (!config.targetCounties.includes(condado)) throw badRequest(`Condado no válido. Opciones: ${config.targetCounties.join(', ')}`);
+    Object.assign(patch, { condado, metodo_condado: 'manual' });
+    if (estado === ESTADOS.revisarCondado) estado = ESTADOS.nuevo;
+  }
+  const campos = Object.keys(patch).filter((k) => (patch[k] ?? null) !== (lead[k] ?? null));
+  if (!campos.length && estado === lead.estado) return { ok: true, resultado: 'sin_cambio' };
+  const cambios = [...(lead.cambios || []), { en: new Date().toISOString(), usuario, campos }].slice(-20);
+  const nuevo = { ...lead, ...patch, estado };
+  // Antes de guardar: updateLead modifica el mismo objeto `lead`
+  const criterios = campos.some((k) => ['precio_usd', 'arv_usd'].includes(k)) || estado !== lead.estado;
+  await updateLead(id, { ...patch, estado, cambios, pct_arv: pctArv(nuevo), alerta: computeAlerta(nuevo) });
+  if (criterios && [ESTADOS.nuevo, ESTADOS.noCalifica].includes(estado)) {
+    return aplicarCriterios(id, usuario);
+  }
+  await exportOutputs();
+  return { ok: true, resultado: 'editado' };
 }
 
 const SI_NO = ['Sí', 'No'];

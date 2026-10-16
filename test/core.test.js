@@ -212,7 +212,7 @@ test('pipeline completo con extracción simulada y detección de duplicados', as
   assert.deepEqual(none, { rows: [], descartes: [] });
 });
 
-test('acciones: descartar borra y bloquea reingreso; Tier 1 registra usuario', async () => {
+test('acciones: descartar va a la papelera 48 h, se recupera y bloquea reingreso; Tier 1 registra usuario', async () => {
   const [a, b, sinPrecio] = await leadsMod.addLeads([
     { estado: ESTADOS.nuevo, direccion: '10 A St', clave_direccion: '10 A ST 33311' },
     { estado: ESTADOS.nuevo, direccion: '20 B St', clave_direccion: '20 B ST 33311' },
@@ -223,10 +223,19 @@ test('acciones: descartar borra y bloquea reingreso; Tier 1 registra usuario', a
   assert.ok(!ids.includes(a.id));
   const again = await leadsMod.addLeads([{ estado: ESTADOS.nuevo, direccion: '10 A St', clave_direccion: '10 A ST 33311' }]);
   assert.equal(again.length, 0);
-  // el lead descartado no deja ningún dato, solo la clave
+  assert.equal((await leadsMod.listPapelera()).find((l) => l.id === a.id).descartado_motivo, 'usuario');
+  // Recuperar: vuelve con su etapa y la dirección se desbloquea
+  assert.equal((await actions.recuperar(a.id, 'Carlos')).estado, ESTADOS.nuevo);
+  assert.ok((await leadsMod.listLeads()).some((l) => l.id === a.id));
+  assert.equal((await leadsMod.loadLeads()).descartados['10 A ST 33311'], undefined);
+  await assert.rejects(actions.recuperar(a.id, 'Carlos'), /no encontrado/);
+  // A las 48 h se borra: no deja ningún dato, solo la clave
+  await actions.descartar(a.id, 'Carlos');
+  assert.equal(await actions.purgarDescartados(Date.now() + 47 * 36e5), 0);
+  assert.equal(await actions.purgarDescartados(Date.now() + 49 * 36e5), 1);
   const raw = JSON.parse(await fs.readFile(path.join(process.env.DATA_DIR, 'leads.json'), 'utf8'));
   assert.ok(raw.descartados['10 A ST 33311']);
-  assert.ok(!JSON.stringify(raw.leads).includes('10 A St'));
+  assert.ok(!JSON.stringify([raw.leads, raw.papelera]).includes('10 A St'));
 
   await assert.rejects(actions.pasarATier1(b.id, 'Pedro'), /Usuario no válido/);
   await assert.rejects(actions.pasarATier1(sinPrecio.id, 'Carlos'), /Falta el precio/);
@@ -258,7 +267,7 @@ test('acciones: agregar dirección a un lead con ARV', async () => {
   assert.equal(lead.tier1_usuario, 'Jaime');
   assert.equal(lead.tier1_auto, true);
 
-  // En zona con precio, pero margen 25 %: no califica
+  // En zona con precio, 75 % of ARV pero precio ≥ $300k: no califica
   const nc = await actions.agregarDireccion(p5.id, { calle: '700 E Ocean Ave', ciudad: 'Boynton Beach', zip: '33435' }, 'Jaime', geo('Palm Beach'));
   assert.equal(nc.resultado, 'no_califica');
   assert.equal((await leadsMod.listLeads()).find((l) => l.id === p5.id).estado, ESTADOS.noCalifica);
@@ -367,7 +376,7 @@ test('regla de precio: alerta, agregar precio y Tier 1', async () => {
   await assert.rejects(actions.agregarPrecio(lead.id, { precio_usd: '300000' }, 'Pedro'), /Usuario no válido/);
   await assert.rejects(actions.pasarATier1(lead.id, 'Andres'), /Falta el precio/);
 
-  // margen (450k - 325k) / 450k = 27.8 %: queda No califica
+  // 325k / 450k = 72.2 % of ARV, pero precio ≥ $300k: queda No califica
   assert.equal((await actions.agregarPrecio(lead.id, { precio_usd: '$325k', arv_usd: '' }, 'Andres')).resultado, 'no_califica');
   const l = (await leadsMod.listLeads()).find((x) => x.id === lead.id);
   assert.equal(l.precio_usd, 325000);
@@ -375,19 +384,47 @@ test('regla de precio: alerta, agregar precio y Tier 1', async () => {
   assert.equal(l.alerta, '');
   assert.equal(l.cambios.at(-1).usuario, 'Andres');
   assert.equal(l.estado, ESTADOS.noCalifica);
-  assert.equal(l.margen_pct, 27.8);
+  assert.equal(l.pct_arv, 72.2);
   // Con precio ya no se puede volver a cambiar desde el panel; Tier 1 manual sigue disponible
   await assert.rejects(actions.agregarPrecio(lead.id, { precio_usd: '400000' }, 'Carlos'), /ya tiene precio/);
   assert.equal((await actions.pasarATier1(lead.id, 'Carlos')).resultado, 'tier1');
+});
+
+test('editar: datos del lead en Nuevo, condado y criterios', async () => {
+  const geo = (county) => ({ geocode: async () => ({ county, ambiguous: false, method: 'test' }) });
+  const [l] = await leadsMod.addLeads([{ estado: ESTADOS.nuevo, direccion: '1 Edit St', ciudad: 'Jupiter', zip: '33458', condado: 'Palm Beach', tipo: 'single_family', precio_usd: 250000, arv_usd: 300000, beds: 3 }]);
+  const base = { calle: '1 Edit St', ciudad: 'Jupiter', zip: '33458', condado: 'Palm Beach', tipo: 'single_family', precio_usd: '250000', arv_usd: '300000', beds: '3', baths: '', sqft: '' };
+  assert.equal((await actions.editarLead(l.id, base, 'Carlos')).resultado, 'sin_cambio');
+  await assert.rejects(actions.editarLead(l.id, { ...base, tipo: 'Castillo' }, 'Carlos'), /Tipo no válido/);
+  assert.equal((await actions.editarLead(l.id, { ...base, tipo: 'land', sqft: '1,200' }, 'Carlos')).resultado, 'editado');
+  let x = (await leadsMod.listLeads()).find((y) => y.id === l.id);
+  assert.equal(x.tipo, 'land');
+  assert.equal(x.sqft, 1200);
+  assert.deepEqual(x.cambios.at(-1).campos, ['sqft', 'tipo']);
+  Object.assign(base, { tipo: 'land', sqft: '1200' });
+  assert.equal((await actions.editarLead(l.id, { ...base, arv_usd: '$300k', precio_usd: '250k' }, 'Carlos')).resultado, 'sin_cambio');
+  // 250k / 290k = 86.2 % of ARV -> No califica
+  const nc = await actions.editarLead(l.id, { ...base, arv_usd: '290000' }, 'Carlos');
+  assert.equal(nc.resultado, 'no_califica');
+  // Dirección fuera de zona -> Descartados
+  const out = await actions.editarLead(l.id, { ...base, arv_usd: '290000', calle: '1 Brickell Ave', ciudad: 'Miami', zip: '' }, 'Carlos', geo('Miami-Dade'));
+  assert.equal(out.resultado, 'descartado');
+  assert.ok((await leadsMod.listPapelera()).some((y) => y.id === l.id));
+  // Revisar condado con condado a mano -> Nuevo y criterios
+  const [r] = await leadsMod.addLeads([{ estado: ESTADOS.revisarCondado, direccion: '2 Edit St', precio_usd: 100000, arv_usd: 400000 }]);
+  assert.equal((await actions.editarLead(r.id, { calle: '2 Edit St', condado: 'Broward', precio_usd: '100000', arv_usd: '400000' }, 'Carlos')).resultado, 'tier1');
+  x = (await leadsMod.listLeads()).find((y) => y.id === r.id);
+  assert.equal(x.metodo_condado, 'manual');
+  await assert.rejects(actions.editarLead(r.id, base, 'Carlos'), /Solo se editan leads en Nuevo/);
 });
 
 test('criterios: Tier 1 automático con tope diario, No califica y falta ARV', async () => {
   const { evaluarCriterios } = await import('../src/pipeline.js');
   const { listJobs } = await import('../src/tier1.js');
   const { config } = await import('../src/config.js');
-  assert.deepEqual(evaluarCriterios({ precio_usd: 150000, arv_usd: 400000 }), { califica: true, margen: 62.5, motivo: '' });
-  assert.equal(evaluarCriterios({ precio_usd: 160000, arv_usd: 400000 }).califica, true); // 60 % exacto
-  assert.match(evaluarCriterios({ precio_usd: 200000, arv_usd: 400000 }).motivo, /margen 50% < 60%/);
+  assert.deepEqual(evaluarCriterios({ precio_usd: 150000, arv_usd: 400000 }), { califica: true, pct: 37.5, motivo: '' });
+  assert.equal(evaluarCriterios({ precio_usd: 225000, arv_usd: 300000 }).califica, true); // 75 % exacto
+  assert.match(evaluarCriterios({ precio_usd: 240000, arv_usd: 300000 }).motivo, /80% of ARV > 75%/);
   assert.match(evaluarCriterios({ precio_usd: 300000, arv_usd: 900000 }).motivo, /precio ≥ \$300,000/);
   assert.equal(evaluarCriterios({ precio_usd: 150000 }).califica, null);
 
@@ -405,7 +442,7 @@ test('criterios: Tier 1 automático con tope diario, No califica y falta ARV', a
       const l = await get(n.id);
       assert.equal(l.estado, ESTADOS.tier1);
       assert.equal(l.tier1_usuario, 'Automático');
-      assert.equal(l.margen_pct, 75);
+      assert.equal(l.pct_arv, 25);
     }
     assert.equal((await get(nuevos[4].id)).estado, ESTADOS.noCalifica);
     assert.match((await get(nuevos[4].id)).criterio, /precio/);
@@ -501,7 +538,10 @@ test('informes: subir, servir aislado, vista pública y borrar al descartar', as
     await assert.rejects(guardarInforme(lead.id, { tier: 1, nombre: 'grande.pdf' }, Readable.from([Buffer.alloc(10)]), { maxBytes: 5 }), /supera/);
     assert.ok((await (await fetch(`${base}/api/leads`)).json()).disco);
 
+    // Descartado: el panel lo sigue mostrando (pestaña Descartados); se borra al vencer la papelera (48 h)
     await actions.descartar(lead.id);
+    assert.equal((await fetch(`${base}/informes/${lead.id}/${encodeURIComponent(nombre)}`)).status, 200);
+    await actions.purgarDescartados(Date.now() + 49 * 36e5);
     assert.equal((await fetch(`${base}/informes/${lead.id}/${encodeURIComponent(nombre)}`)).status, 404);
     await assert.rejects(fs.stat(path.join(process.env.DATA_DIR, 'informes', lead.id)));
   } finally {
