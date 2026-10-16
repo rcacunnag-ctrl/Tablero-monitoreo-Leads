@@ -11,6 +11,7 @@ h1{font-size:18px;margin:0}.bar{display:flex;flex-wrap:wrap;gap:8px;padding:0 16
 .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}.tab{border-radius:20px;padding:7px 14px}.tab b{margin-left:6px}
 .tab.on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 select,input,textarea,a.btn,button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
+.portales{display:flex;gap:10px;font-size:12px;margin:2px 0 4px}.portales a{color:var(--accent);font-weight:600}
 button.lnk{border:0;padding:2px 0;background:none;color:var(--accent);font-size:12px;font-weight:600}
 button{cursor:pointer}a.btn{text-decoration:none;color:var(--accent);font-weight:600}
 button.ok{border-color:var(--accent);color:var(--accent);font-weight:600}button.del{color:var(--danger)}
@@ -66,6 +67,7 @@ dialog label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var
 <div class="row"><button value="cancel" formnovalidate>Cancelar</button><button value="ok" class="ok" id="dlgOk"></button></div>
 </form></dialog>
 <dialog id="mapDlg"><h2 id="mapTitle"></h2><iframe id="mapFrame" title="Mapa" referrerpolicy="no-referrer"></iframe>
+<div id="mapPortales"></div>
 <div class="row"><a class="btn" id="mapLink" target="_blank" rel="noopener noreferrer">Abrir en Google Maps</a><button id="mapClose">Cerrar</button></div></dialog>
 <div id="toast"></div>
 
@@ -99,6 +101,13 @@ function detalle(r){const d=[];
  if(r.compra_usuario)d.push('Compra: '+esc(r.compra_usuario)+' '+fecha(r.compra_en));
  return d.map(x=>'<div class="m">'+x+'</div>').join('')}
 const fullAddr=r=>[r.direccion,r.ciudad,(r.ciudad||r.zip)&&r.direccion?'FL '+(r.zip||''):r.zip].filter(Boolean).join(', ').trim()||'—';
+// Fecha del mensaje como "Friday, Oct 16"
+const fechaCorta=s=>{const d=new Date(s);return isNaN(d)?esc(s||''):esc(d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}))};
+// Ficha de la propiedad en cada portal: Zillow por su URL de dirección; Redfin y Realtor por la redirección
+// al primer resultado de DuckDuckGo (las fichas de esos portales llevan un ID que no se conoce de antemano)
+const portales=r=>{if(!r.direccion)return '';const q=fullAddr(r),ddg=s=>'https://duckduckgo.com/?q=%5C'+encodeURIComponent('site:'+s+' '+q);
+ return '<div class="portales">'+[['Redfin',ddg('redfin.com')],['Zillow','https://www.zillow.com/homes/'+encodeURIComponent(q.replace(/\\s+/g,'-'))+'_rb/'],['Realtor',ddg('realtor.com')]]
+  .map(([n,u])=>'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+n+'</a>').join('')+'</div>'};
 function toast(t){const el=$('toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',4000)}
 if(RO){document.querySelectorAll('.act').forEach(e=>e.remove());$('dlXlsx').href='propiedades.xlsx';$('dlCsv').href='propiedades.csv';document.title+=' (solo vista)'}
 function fillEstado(){const op=TABS[tab];$('estado').hidden=op.length<2;$('estado').innerHTML='<option value="">Estado: todos</option>'+op.map(e=>'<option>'+e+'</option>').join('')}
@@ -121,7 +130,7 @@ function actions(r){if(RO)return '';const b=[],btn=(a,t,c)=>'<button class="'+(c
 function render(){const e=$('estado').value,c=$('condado').value,dup=$('dup').value,q=$('q').value.toLowerCase(),en=TABS[tab];
  $('tabs').innerHTML=Object.keys(TABS).map(t=>'<button class="tab'+(t===tab?' on':'')+'" data-tab="'+t+'">'+t+'<b>'+all.filter(r=>TABS[t].includes(r.estado)).length+'</b></button>').join('');
  const f=all.filter(r=>en.includes(r.estado)&&(!e||r.estado===e)&&(!c||r.condado===c)&&(!dup||r.duplicado==='NO')&&(!q||JSON.stringify(r).toLowerCase().includes(q)));
- $('rows').innerHTML=f.map(r=>'<tr><td><span class="e '+esc(cls(r.estado))+'">'+esc(r.estado)+'</span>'+informe(r)+archivos(r)+detalle(r)+'</td><td class="m">'+esc((r.fecha_mensaje||'').replace('T',' ').slice(0,16))+'</td><td>'+esc(r.condado||'—')+'<div class="m">'+esc(r.metodo_condado||'')+'</div></td><td>'+esc(fullAddr(r))+(fullAddr(r)!=='—'?'<div><button class="lnk" data-map="'+r.id+'">📍 Ver mapa</button></div>':'')+'<div class="m">'+esc(r.estado_direccion)+'</div>'+(r.duplicado&&r.duplicado!=='NO'?'<div class="m">Duplicado</div>':'')+(r.alerta?'<div class="alerta">⚠ '+esc(r.alerta)+(r.contacto||r.telefono?': '+esc(r.contacto||r.autor||'')+' '+(r.telefono?'<a href="tel:'+esc(r.telefono)+'">'+esc(r.telefono)+'</a>':''):'')+'</div>':'')+'</td><td>'+money(r.precio_usd)+(r.arv_usd?'<div class="m">ARV '+money(r.arv_usd)+'</div>':'')+(margen(r)!==null?'<div class="m">Margen '+margen(r)+'%</div>':'')+'</td><td>'+esc([r.beds,r.baths].some(x=>x!=null&&x!=='')?(r.beds??'?')+'/'+(r.baths??'?'):'')+'<div class="m">'+esc(r.sqft?r.sqft+' sqft':'')+'</div></td><td>'+esc(r.tipo)+'<div class="m">'+esc(r.tipo_negocio)+'</div></td><td>'+esc(r.contacto||'')+'<div class="m">'+esc(r.telefono||'')+'</div></td><td class="m">'+esc(r.grupo)+'<br>'+esc(r.autor)+'</td><td><details><summary>'+esc(r.resumen)+'</summary><pre>'+esc(r.mensaje_original)+'</pre>'+(r.imagenes_locales||[]).map(p=>'<img src="'+MEDIA+encodeURIComponent(String(p).split(/[\\\\/]/).pop())+'">').join('')+' '+links(r.links_fotos)+' '+links(r.links_portales)+'</details></td>'+(RO?'':'<td>'+actions(r)+'</td>')+'</tr>').join('')||'<tr><td colspan="11" class="m">Sin resultados</td></tr>'}
+ $('rows').innerHTML=f.map(r=>'<tr><td><span class="e '+esc(cls(r.estado))+'">'+esc(r.estado)+'</span>'+informe(r)+archivos(r)+detalle(r)+'</td><td class="m">'+fechaCorta(r.fecha_mensaje)+'</td><td>'+esc(r.condado||'—')+'<div class="m">'+esc(r.metodo_condado||'')+'</div></td><td>'+esc(fullAddr(r))+(fullAddr(r)!=='—'?'<div><button class="lnk" data-map="'+r.id+'">📍 Ver mapa</button></div>'+portales(r):'')+'<div class="m">'+esc(r.estado_direccion)+'</div>'+(r.duplicado&&r.duplicado!=='NO'?'<div class="m">Duplicado</div>':'')+(r.alerta?'<div class="alerta">⚠ '+esc(r.alerta)+(r.contacto||r.telefono?': '+esc(r.contacto||r.autor||'')+' '+(r.telefono?'<a href="tel:'+esc(r.telefono)+'">'+esc(r.telefono)+'</a>':''):'')+'</div>':'')+'</td><td>'+money(r.precio_usd)+(r.arv_usd?'<div class="m">ARV '+money(r.arv_usd)+'</div>':'')+(margen(r)!==null?'<div class="m">Margen '+margen(r)+'%</div>':'')+'</td><td>'+esc([r.beds,r.baths].some(x=>x!=null&&x!=='')?(r.beds??'?')+'/'+(r.baths??'?'):'')+'<div class="m">'+esc(r.sqft?r.sqft+' sqft':'')+'</div></td><td>'+esc(r.tipo)+'<div class="m">'+esc(r.tipo_negocio)+'</div></td><td>'+esc(r.contacto||'')+'<div class="m">'+esc(r.telefono||'')+'</div></td><td class="m">'+esc(r.grupo)+'<br>'+esc(r.autor)+'</td><td><details><summary>'+esc(r.resumen)+'</summary><pre>'+esc(r.mensaje_original)+'</pre>'+(r.imagenes_locales||[]).map(p=>'<img src="'+MEDIA+encodeURIComponent(String(p).split(/[\\\\/]/).pop())+'">').join('')+' '+links(r.links_fotos)+' '+links(r.links_portales)+'</details></td>'+(RO?'':'<td>'+actions(r)+'</td>')+'</tr>').join('')||'<tr><td colspan="11" class="m">Sin resultados</td></tr>'}
 async function post(id,a,body){const res=await fetch('/api/leads/'+id+'/'+a,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor':'1'},body:JSON.stringify(body||{})});
  const d=await res.json().catch(()=>({}));if(!res.ok)throw new Error(d.error||'Error '+res.status);return d}
 // Muestra un grupo de campos; los ocultos se deshabilitan para que no viajen en el formulario.
@@ -145,7 +154,7 @@ const MSG=d=>({descartado:'Descartado: fuera de condado ('+(d.condado||'?')+')',
 $('frm').addEventListener('submit',async ev=>{if(ev.submitter?.value!=='ok'||!current)return;const fd=Object.fromEntries(new FormData($('frm')));store.set('usuario',fd.usuario);if(fd.ejecutor)store.set('ejecutor',fd.ejecutor);
  try{toast(MSG(await post(current.id,current.a,fd)))}catch(e){toast(e.message)}current=null;load()});
 function openMap(r){const q=fullAddr(r);$('mapTitle').textContent=q;$('mapFrame').src='https://maps.google.com/maps?q='+encodeURIComponent(q)+'&z=16&output=embed';
- $('mapLink').href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);$('mapDlg').showModal()}
+ $('mapLink').href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);$('mapPortales').innerHTML=portales(r);$('mapDlg').showModal()}
 $('mapClose').onclick=()=>$('mapDlg').close();$('mapDlg').addEventListener('close',()=>{$('mapFrame').src='about:blank'});
 document.addEventListener('click',async ev=>{const t=ev.target.closest('[data-tab]');if(t){tab=t.dataset.tab;store.set('tab',tab);fillEstado();render();return}
  const m=ev.target.closest('[data-map]');if(m){const r=all.find(x=>x.id===m.dataset.map);if(r)openMap(r);return}
