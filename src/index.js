@@ -7,6 +7,7 @@ import { migrateLegacy } from './migrate.js';
 import { refreshAlertas, purgarDescartados } from './actions.js';
 import { writeVista, startVista } from './vista.js';
 import { conectarNotificaciones, iniciarNotificaciones } from './notify.js';
+import { iniciarCorreo } from './email.js';
 
 const listOnly = process.argv.includes('--list-groups');
 let selected = new Map();
@@ -26,6 +27,7 @@ if (!listOnly) {
   await writeVista();
   startVista();
   iniciarNotificaciones();
+  iniciarCorreo();
 }
 
 async function flush(key, { process: run = true } = {}) {

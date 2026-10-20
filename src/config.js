@@ -6,6 +6,22 @@ const bool = (v, def) => (v === undefined || v === '' ? def : /^(1|true|yes|si)$
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
 
+/**
+ * Cuentas de correo configuradas. La primera usa EMAIL_HOST/EMAIL_USER/EMAIL_PASS (EMAIL_PORT, EMAIL_SOLO_NUEVOS) y
+ * las demás EMAIL_<n>_* con n de 2 a 9. Una cuenta incompleta (sin host, usuario o contraseña) se ignora.
+ * SOLO_NUEVOS=true: en la primera lectura no importa lo que ya haya en el buzón, solo lo que llegue después.
+ */
+export function cuentasCorreo(env) {
+  const cuentas = [];
+  for (const n of ['', ...[2, 3, 4, 5, 6, 7, 8, 9].map((i) => `_${i}`)]) {
+    const v = (k) => String(env[`EMAIL${n}_${k}`] ?? '').trim();
+    const pass = env[`EMAIL${n}_PASS`] || '';
+    if (!v('HOST') || !v('USER') || !pass) continue;
+    cuentas.push({ id: `${v('USER')}@${v('HOST')}`, host: v('HOST'), port: Number(v('PORT') || 993), user: v('USER'), pass, soloNuevos: /^(1|true|yes|si|sí)$/i.test(v('SOLO_NUEVOS')) });
+  }
+  return cuentas;
+}
+
 export const config = {
   // WhatsApp (única dependencia externa)
   waPhoneNumber: (process.env.WA_PHONE_NUMBER || '').replace(/\D/g, ''),
@@ -19,6 +35,15 @@ export const config = {
   // Extracción local
   ocrEnabled: bool(process.env.OCR_ENABLED, true), // leer texto de flyers con Tesseract (offline)
   useCensusGeocoder: bool(process.env.USE_CENSUS_GEOCODER, false), // opcional, gratuito, requiere internet
+
+  // Leads por correo (IMAP, solo lectura). Una o varias cuentas: EMAIL_HOST/USER/PASS y EMAIL_2_*, EMAIL_3_* ... EMAIL_9_*
+  // (ver cuentasCorreo). Las contraseñas van solo en el .env del servidor; scripts/correo.sh agrega y quita cuentas.
+  get emailCuentas() { return cuentasCorreo(process.env); },
+  emailSondeoMin: Number(process.env.EMAIL_SONDEO_MIN || 5),
+  emailMaxMensajeMb: Number(process.env.EMAIL_MAX_MENSAJE_MB || 25),
+  emailMaxAdjuntoMb: Number(process.env.EMAIL_MAX_ADJUNTO_MB || 10),
+  emailMaxPorPasada: Number(process.env.EMAIL_MAX_POR_PASADA || 50),
+  get emailEnabled() { return this.emailCuentas.length > 0; },
 
   // Panel local
   dashboardPort: Number(process.env.DASHBOARD_PORT || 3000),

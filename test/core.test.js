@@ -745,3 +745,95 @@ test('mercado: cola por dirección, validación del reporte y reintentos', async
   for (let i = 0; i < 3; i++) await m.reportarMercado(l.id, { error: 'cupo' });
   assert.equal((await cola()).length, 0);
 });
+
+const tarjeta = (precio, ciudad, detalle, arv, extra = '') =>
+  `<td width="33.33%"><div><img src="x.png"><a href="https://t.example/x"><img alt="Text/Call Now"></a><div>${precio}</div><div>${ciudad}</div><div>${detalle}</div><div><span>ARV:</span><span>${arv}</span></div>${extra}</div></td>`;
+const BOLETIN = `<html><body><div>DIRECT OPPORTUNITIES</div><table><tr>
+${tarjeta('$124,900', 'DELRAY BEACH', '5250 Las Verdes Cir, Delray Beach, FL 33484<br>2 Beds / 2 Baths | 1,050 Sq Ft | Condo', '$225,000')}
+${tarjeta('$286,000', 'RIVIERA BEACH', '3621 W 36th St, Riviera Beach, FL 33404 , N/A, 4 Beds / 2 Baths | 7', 'N/A', '<div>013 Sq Ft Lot | 1963 Build</div>')}
+${tarjeta('$407,000', 'DELRAY BEACH', 'Inwood Dr, Delray Beach, FL 33484, N/A, 4 Beds / 3 Baths | 1, 143 Sq Ft', 'N/A')}
+</tr></table><div>TERMS: cash only</div></body></html>`;
+
+test('correo: boletín con tarjetas -> una publicación por propiedad, sin enlaces ni basura', async () => {
+  const { correoAPublicaciones, tarjetasDeHtml, autorDe } = await import('../src/email.js');
+  const t = tarjetasDeHtml(BOLETIN);
+  assert.equal(t.length, 3);
+  assert.equal(t[0], '5250 Las Verdes Cir, Delray Beach, FL 33484 2 Beds / 2 Baths | 1,050 Sq Ft | Condo\nAsking price: $124,900\nARV: $225000');
+  assert.match(t[1], /^3621 W 36th St, Riviera Beach, FL 33404, 4 Beds \/ 2 Baths\nAsking price: \$286,000\nLot size: 7,013 sqft \| 1963 Build$/); // lote partido por la plantilla
+  assert.ok(!t[1].includes('ARV')); // N/A: sin ARV
+  assert.match(t[2], /1,143 Sq Ft/);
+  const parsed = { messageId: '<m1@x>', date: new Date('2026-10-08T14:36:00Z'), subject: 'Fwd: Deals', html: BOLETIN, attachments: [],
+    from: { value: [{ name: 'Roberto', address: 'r@x.com' }] },
+    text: '---------- Forwarded message ---------\nDe: Andres Yory <a@x.io>\n\n---------- Forwarded message ---------\nFrom: Juan Maya <info@k.com>\nSubject: Deals' };
+  assert.equal(autorDe(parsed), 'Juan Maya'); // el remitente original, no quien reenvió
+  const posts = await correoAPublicaciones(parsed);
+  assert.deepEqual(posts.map((p) => p.id), ['email:m1@x#1', 'email:m1@x#2', 'email:m1@x#3']);
+  assert.equal(posts[0].groupName, 'Email: Juan Maya');
+  assert.equal(posts[0].timestamp, '2026-10-08T14:36:00.000Z');
+});
+
+test('correo: texto plano con imagen; ignora PDF y adjuntos de otros tipos o muy grandes', async () => {
+  const { correoAPublicaciones, limpiarTexto } = await import('../src/email.js');
+  assert.equal(limpiarTexto('Hola\n[image: Logo]\n<https://track.example/abc?x=1>\nCasa en 1 Main St'), 'Hola\n\nCasa en 1 Main St');
+  const adj = (contentType, size, contentDisposition = 'attachment') => ({ contentType, size, contentDisposition, content: Buffer.from('x') });
+  const parsed = { messageId: '<m2@x>', date: new Date('2026-10-09T10:00:00Z'), subject: 'Deal 12 Oak St', text: '12 Oak St, Lake Worth, FL 33460 asking $100k', html: false,
+    from: { value: [{ name: 'Wholesaler', address: 'w@x.com' }] },
+    attachments: [adj('image/png', 1000), adj('image/png', 500, 'inline'), adj('application/x-msdownload', 1000), adj('image/jpeg', 99e6), adj('application/pdf', 1000)] };
+  const [p] = await correoAPublicaciones(parsed, { guardarImagen: async () => '/media/f.png' });
+  assert.deepEqual(p.images, [{ path: '/media/f.png' }]); // solo la imagen adjunta de tamaño normal
+  assert.match(p.text, /^Deal 12 Oak St\n\n12 Oak St, Lake Worth/);
+  assert.ok(!/300,000/.test(p.text)); // el PDF no se lee
+  assert.equal(p.groupName, 'Email: Wholesaler');
+});
+
+test('correo: sondeo IMAP solo lee correos nuevos y llena el tablero con las mismas reglas', async () => {
+  const { sondearCorreo } = await import('../src/email.js');
+  const { config } = await import('../src/config.js');
+  const { listLeads } = await import('../src/leads.js');
+  const eml = (id, n) => Buffer.from(`From: Juan Maya <info@k.com>\r\nMessage-ID: <${id}>\r\nDate: Thu, 8 Oct 2026 09:36:00 -0500\r\nSubject: Deal ${n}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${n}00 ${['Alpha', 'Bravo', 'Charlie'][n - 1]} Mail St, Lake Worth, FL 33460\r\nAsking: $100,000\r\nARV: $400,000\r\n3/2 1200 sqft\r\n`);
+  const buzon = [{ uid: 1, source: eml('a@x', 1) }, { uid: 2, source: eml('b@x', 2) }];
+  const cliente = { mailbox: { uidValidity: 7n }, connect: async () => {}, logout: async () => {}, close: async () => {},
+    getMailboxLock: async () => ({ release() {} }),
+    search: async (q) => buzon.filter((m) => m.uid >= Number(String(q.uid).split(':')[0])).map((m) => m.uid),
+    fetchOne: async (uid) => ({ ...buzon.find((m) => m.uid === uid), size: 400 }) };
+  const calles = (ls) => ls.map((l) => l.direccion).filter((d) => /Mail St/.test(d)).sort();
+  const antes = (await listLeads()).length;
+  const r1 = await sondearCorreo({}, { cliente });
+  assert.equal(r1.correos, 2);
+  const ls = await listLeads();
+  assert.equal(ls.length, antes + 2);
+  assert.deepEqual(calles(ls), ['100 Alpha Mail St', '200 Bravo Mail St']);
+  assert.equal(ls.find((l) => l.direccion === '100 Alpha Mail St').grupo, 'Email: Juan Maya');
+  assert.equal(ls.find((l) => l.direccion === '100 Alpha Mail St').pct_arv, 25); // mismas reglas: % of ARV
+  // Segunda pasada sin correos nuevos; luego llega uno nuevo y solo ese se procesa
+  assert.equal((await sondearCorreo({}, { cliente })).correos, 0);
+  buzon.push({ uid: 3, source: eml('c@x', 3) });
+  assert.equal((await sondearCorreo({}, { cliente })).correos, 1);
+  assert.deepEqual(calles(await listLeads()), ['100 Alpha Mail St', '200 Bravo Mail St', '300 Charlie Mail St']);
+  assert.equal(config.emailEnabled, false); // sin EMAIL_HOST/USER/PASS no arranca el sondeo
+});
+
+test('correo: varias cuentas por .env y "solo nuevos" en la primera lectura', async () => {
+  const { cuentasCorreo } = await import('../src/config.js');
+  const { sondearCorreo } = await import('../src/email.js');
+  const { listLeads } = await import('../src/leads.js');
+  const cs = cuentasCorreo({ EMAIL_HOST: 'mail.a.com', EMAIL_USER: 'a@a.com', EMAIL_PASS: 'x', EMAIL_3_HOST: 'imap.b.com', EMAIL_3_PORT: '143', EMAIL_3_USER: 'b@b.com', EMAIL_3_PASS: 'y', EMAIL_3_SOLO_NUEVOS: 'true', EMAIL_2_HOST: 'sin-clave.com', EMAIL_2_USER: 'c@c.com' });
+  assert.deepEqual(cs.map((c) => [c.id, c.port, c.soloNuevos]), [['a@a.com@mail.a.com', 993, false], ['b@b.com@imap.b.com', 143, true]]); // la cuenta sin contraseña se ignora
+  assert.deepEqual(cuentasCorreo({}), []);
+
+  const eml = (id, calle) => Buffer.from(`From: W <w@x.com>\r\nMessage-ID: <${id}>\r\nDate: Thu, 8 Oct 2026 09:36:00 -0500\r\nSubject: Deal\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${calle}, Lake Worth, FL 33460\r\nAsking: $100,000\r\nARV: $400,000\r\n3/2 1200 sqft\r\n`);
+  const buzones = { 'a@a.com@mail.a.com': [{ uid: 1, source: eml('v1@x', '10 Viejo Ave') }], 'b@b.com@imap.b.com': [{ uid: 1, source: eml('v2@x', '20 Antiguo Ave') }, { uid: 2, source: eml('v3@x', '30 Previo Ave') }] };
+  let actual;
+  const cliente = { mailbox: { uidValidity: 5n }, connect: async () => {}, logout: async () => {}, close: async () => {}, getMailboxLock: async () => ({ release() {} }),
+    search: async (q) => buzones[actual].filter((m) => m.uid >= Number(String(q.uid).split(':')[0])).map((m) => m.uid),
+    fetchOne: async (uid) => ({ ...buzones[actual].find((m) => m.uid === uid), size: 400 }) };
+  // Un cliente por cuenta: el id de la cuenta que se está leyendo decide el buzón
+  const porCuenta = (c) => ({ ...cliente, connect: async () => { actual = c.id; } });
+  const calles = async () => (await listLeads()).map((l) => l.direccion).filter((d) => /(Viejo|Antiguo|Previo|Nuevo) Ave/.test(d)).sort();
+  const sondear = async () => { const t = { correos: 0, publicaciones: 0 }; for (const c of cs) { const r = await sondearCorreo({}, { cliente: porCuenta(c), cuentas: [c] }); t.correos += r.correos; t.publicaciones += r.publicaciones; } return t; };
+  assert.equal((await sondear()).correos, 1); // a@a.com importa su buzón; b@b.com (solo nuevos) ignora los 2 previos
+  assert.deepEqual(await calles(), ['10 Viejo Ave']);
+  buzones['b@b.com@imap.b.com'].push({ uid: 3, source: eml('v4@x', '40 Nuevo Ave') });
+  assert.equal((await sondear()).correos, 1); // ahora sí llega el nuevo de b@b.com
+  assert.deepEqual(await calles(), ['10 Viejo Ave', '40 Nuevo Ave']);
+});

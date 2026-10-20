@@ -105,6 +105,21 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
 | 6 | Piñón ⚙️ para editar dirección, condado, precio, ARV, beds, baths, sqft y tipo en Nuevo; recalcula condado y criterios | hecho |
 | 7 | **% of ARV** con regla ≤ 75 % (+ precio < $300k, tope 3/día) | hecho |
 
+## Plan 4 (2026-10-20): leads por correo
+
+Un buzón dedicado (Colombia Hosting, cPanel; `mail.haitech-consulting.com:993`) alimenta el mismo tablero que WhatsApp.
+
+| # | Paso | Estado |
+|---|---|---|
+| 1 | `src/email.js`: sondeo IMAP cada 5 min desde Oracle, solo lectura (no marca ni mueve correos); estado en `data/email-state.json` (UIDVALIDITY + último UID) | hecho |
+| 2 | Cada correo pasa a publicaciones `{id, timestamp, groupName, sender, text, images}` y entra a la misma cola (`enqueuePost` → `processInbox`): mismas reglas de extracción, condado, repost y correcciones, criterios (% of ARV ≤ 75 %), Tier 1 automático, avisos y mercado | hecho |
+| 3 | Boletines con tarjetas (formato Kassas): una publicación por tarjeta, leída del HTML (precio, ciudad, dirección, ARV, beds/baths, sqft, lote); se corrigen las cifras que la plantilla parte en dos líneas ("1, 143", lote "7" + "013") | hecho |
+| 4 | Autor = remitente original de un reenvío; grupo = `Email: <autor>` | hecho |
+| 5 | Adjuntos: solo imágenes (OCR local); el resto, PDF incluidos, se ignora (decisión del usuario: no se necesita leer PDF); tope de tamaño | hecho |
+| 6 | Seguridad: el texto del correo nunca se pasa a Claude; sin abrir enlaces; la contraseña solo en el `.env` del servidor (`EMAIL_HOST`, `EMAIL_USER`, `EMAIL_PASS`) | hecho |
+| 6b | Varias cuentas: la primera con `EMAIL_HOST/USER/PASS` y las demás con `EMAIL_2_*` … `EMAIL_9_*` (`EMAIL_n_PORT`, `EMAIL_n_SOLO_NUEVOS=true` para no importar lo que ya hay). Agregar o quitar una cuenta: `./scripts/correo.sh agregar | quitar <usuario o número> | listar` en el servidor (edita el `.env`, hace copia `.env.bak-correo` y reinicia). El estado de lectura es por cuenta | hecho |
+| 7 | Despliegue: la imagen necesita `npm ci` (nuevas dependencias `imapflow` y `mailparser`) | hecho |
+
 ## Bitácora
 - 2026-10-06: plan creado. Decisiones: R6 = Census y, si no resuelve, Revisar condado. Dirección = número + calle. R7 = no reingresa.
 - 2026-10-06: implementado (`src/leads.js`, `actions.js`, `tier1.js`, `migrate.js`; cambios en `pipeline.js`, `sink.js`, `dashboard.js`, `process-inbox.js`, `config.js`). Pruebas: 18/18 en Linux (la de OCR falla solo en Windows por la ruta del fixture, no por estos cambios). Prueba manual del panel con datos de ejemplo: migración, Tier 1, agregar dirección (en zona, fuera y sin determinar) y rechazo de peticiones externas (403).
@@ -190,3 +205,5 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
 - 2026-10-16: Plan 3, pasos 1-3 y 5-7. `discardLead` pasa el lead a `papelera` (48 h; `purgarDescartados` cada hora borra lead e informes); `recuperarLead`; `editarLead` y `TIPOS`; `pctArv` reemplaza a `margenPct` (`pct_arv` en lugar de `margen_pct`, se migra al arrancar). Con los datos actuales ningún "No califica" pasa a cumplir con la regla nueva. Pruebas: 33 (32 + OCR solo en Linux).
 - 2026-10-16: Plan 3, paso 4. `src/mercado.js` tiene la cola (`GET /api/mercado-jobs?ejecutor=`, solo para MERCADO_EJECUTOR, por defecto TIER1_AUTO_EJECUTOR) y valida el reporte (`POST /api/mercado-jobs/:id/estado`), que guarda `lead.mercado` con la dirección consultada. Tras 3 errores con la misma dirección deja de consultarla. Runner: `Sync-Mercado` procesa 6 leads por corrida con su propio candado; Codex usa `--output-schema`. Panel: línea plegable debajo del precio con notas y fuentes; Excel: columnas `mercado_*`. Piloto: Codex tarda 13–33 s por lead y Haiku unos 49 s.
 - 2026-10-16: la tarea programada del PC de Roberto apuntaba a `Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0...\pwsh.exe`, que desapareció cuando la Store actualizó PowerShell. El runner dejaba de correr sin avisar (ni Tier 1 automático ni mercado; no había órdenes atrasadas). Arreglo: la tarea usa el alias estable `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`, y `instalar-ejecutor.ps1` lo prefiere al crear la tarea.
+- 2026-10-20: Plan 4, lector de correo. Con el boletín de prueba (Kassas, 8 tarjetas) salen 8 publicaciones; 7 con calle completa y 1 ("Inwood Dr", sin número) se descarta por no tener dirección ni ARV. Se corrigió un error real al probar: `uidValidity` de ImapFlow es BigInt y se comparaba como texto, así que cada pasada releía todo el buzón. Pruebas: 36 (+1 OCR solo en Linux).
+- 2026-10-20: lector de correo con varias cuentas y `scripts/correo.sh`. Sin PDF (decisión del usuario). Pruebas: 37 (+1 OCR solo en Linux).
