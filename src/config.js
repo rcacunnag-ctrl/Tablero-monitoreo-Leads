@@ -43,6 +43,7 @@ export const config = {
   emailMaxMensajeMb: Number(process.env.EMAIL_MAX_MENSAJE_MB || 25),
   emailMaxAdjuntoMb: Number(process.env.EMAIL_MAX_ADJUNTO_MB || 10),
   emailMaxPorPasada: Number(process.env.EMAIL_MAX_POR_PASADA || 50),
+  emailMarcarLeido: process.env.EMAIL_MARCAR_LEIDO !== 'false', // única escritura en el buzón: la marca \Seen
   get emailEnabled() { return this.emailCuentas.length > 0; },
 
   // Panel local

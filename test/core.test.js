@@ -795,7 +795,9 @@ test('correo: sondeo IMAP solo lee correos nuevos y llena el tablero con las mis
   const eml = (id, n) => Buffer.from(`From: Juan Maya <info@k.com>\r\nMessage-ID: <${id}>\r\nDate: Thu, 8 Oct 2026 09:36:00 -0500\r\nSubject: Deal ${n}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${n}00 ${['Alpha', 'Bravo', 'Charlie'][n - 1]} Mail St, Lake Worth, FL 33460\r\nAsking: $100,000\r\nARV: $400,000\r\n3/2 1200 sqft\r\n`);
   const buzon = [{ uid: 1, source: eml('a@x', 1) }, { uid: 2, source: eml('b@x', 2) }];
   const cliente = { mailbox: { uidValidity: 7n }, connect: async () => {}, logout: async () => {}, close: async () => {},
-    getMailboxLock: async () => ({ release() {} }),
+    getMailboxLock: async (_, o) => { cliente.soloLectura = o?.readOnly; return { release() {} }; },
+    messageFlagsAdd: async (uid, flags) => { cliente.vistos.push([uid, ...flags]); },
+    vistos: [],
     search: async (q) => buzon.filter((m) => m.uid >= Number(String(q.uid).split(':')[0])).map((m) => m.uid),
     fetchOne: async (uid) => ({ ...buzon.find((m) => m.uid === uid), size: 400 }) };
   const calles = (ls) => ls.map((l) => l.direccion).filter((d) => /Mail St/.test(d)).sort();
@@ -812,6 +814,8 @@ test('correo: sondeo IMAP solo lee correos nuevos y llena el tablero con las mis
   buzon.push({ uid: 3, source: eml('c@x', 3) });
   assert.equal((await sondearCorreo({}, { cliente })).correos, 1);
   assert.deepEqual(calles(await listLeads()), ['100 Alpha Mail St', '200 Bravo Mail St', '300 Charlie Mail St']);
+  assert.deepEqual(cliente.vistos, [[1, '\Seen'], [2, '\Seen'], [3, '\Seen']]); // procesados -> marcados como leídos
+  assert.equal(cliente.soloLectura, false);
   assert.equal(config.emailEnabled, false); // sin EMAIL_HOST/USER/PASS no arranca el sondeo
 });
 

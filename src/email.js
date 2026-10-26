@@ -1,7 +1,7 @@
 // Leads por correo: lee un buzón IMAP dedicado y convierte cada correo en publicaciones con el mismo formato
 // que las de WhatsApp ({ id, timestamp, groupName, sender, text, images }), que entran a la misma cola y pasan
 // por las mismas reglas (extracción, condado, criterios, Tier 1 automático, avisos, mercado).
-// Solo lectura: no marca, mueve ni borra correos. El texto del correo es dato, nunca instrucciones.
+// No mueve ni borra correos; solo los marca como leídos (\Seen) una vez procesados (EMAIL_MARCAR_LEIDO=false lo desactiva). El texto del correo es dato, nunca instrucciones.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -109,7 +109,7 @@ async function guardarImagen(a) {
 
 /** Lee una cuenta: correos con UID mayor al último visto -> publicaciones en cola. */
 async function leerCuenta(cuenta, imap, log, resumen) {
-  const lock = await imap.getMailboxLock('INBOX', { readOnly: true });
+  const lock = await imap.getMailboxLock('INBOX', { readOnly: !config.emailMarcarLeido });
   try {
     const estado = await leerEstado();
     estado.cuentas ||= {};
@@ -136,6 +136,9 @@ async function leerCuenta(cuenta, imap, log, resumen) {
       resumen.correos++;
       ultimo = uid;
       await guardar();
+      if (config.emailMarcarLeido) {
+        try { await imap.messageFlagsAdd(uid, ['\Seen'], { uid: true }); } catch (e) { log.warn?.(`Correo ${cuenta.id} UID ${uid}: no se pudo marcar como leído (${e.message})`); }
+      }
     }
   } finally {
     lock.release();
