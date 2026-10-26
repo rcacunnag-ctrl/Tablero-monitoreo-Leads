@@ -9,7 +9,7 @@ Fecha: 2026-10-06 · Estado: **completado y desplegado en Oracle** (2026-10-06).
 | R1 | Mensaje que no es anuncio | Se ignora |
 | R2 | Sin dirección (no hay número + calle) y sin ARV | **Descarte automático** (no se guarda) |
 | R3 | Sin dirección y con ARV | Entra como **Pendiente dirección** con la alerta "Solicitar dirección al wholesaler" |
-| R4 | Con dirección en Broward, Palm Beach o Martin | Entra como **Nuevo** |
+| R4 | Con dirección en Broward o Palm Beach (Martin se quitó el 2026-10-26) | Entra como **Nuevo** |
 | R5 | Con dirección fuera de esos condados | **Descarte automático** |
 | R6 | Con dirección, pero el condado no se puede determinar (ni por tablas ni por el geocodificador del Census) | Entra como **Revisar condado** y el usuario decide |
 | R7 | Dirección ya descartada antes | No vuelve a entrar. Solo se guarda la dirección normalizada, sin otros datos |
@@ -69,7 +69,7 @@ El mapa y las pestañas los procesa el navegador. Los informes son archivos est�
 ### Decisiones
 | # | Decisión |
 |---|---|
-| C1 | Condados: Palm Beach, Broward y Martin (ya existía; R4/R5) |
+| C1 | Condados: solo Palm Beach y Broward (hasta el 2026-10-26 también Martin; R4/R5). Sin calle, un lead cuya ciudad es de otro condado se descarta |
 | C2 | Margen = (ARV − precio) / ARV × 100 |
 | C3 | **Tier 1 automático** si **% of ARV = precio / ARV × 100 ≤ 75 %** (hasta el 2026-10-16: margen ≥ 60 %) y el precio es **< $300,000**. Si no cumple, queda **"No califica"** con el motivo, en la pestaña Nuevo, y se puede pasar a Tier 1 a mano. Sin precio o sin ARV queda Nuevo con la alerta "Solicitar … al wholesaler" |
 | C4 | Tope de **3 informes Tier 1 automáticos por día** (zona America/New_York). Los que no caben esperan al día siguiente. Los Tier 1 manuales no tienen tope |

@@ -52,7 +52,7 @@ export const config = {
   vistaToken: (process.env.VISTA_TOKEN || '').trim(),
   vistaPort: Number(process.env.VISTA_PORT || 3001),
 
-  targetCounties: list(process.env.TARGET_COUNTIES || 'Palm Beach,Broward,Martin'),
+  targetCounties: list(process.env.TARGET_COUNTIES || 'Palm Beach,Broward'),
 
   // Tier 1: usuarios que pueden ejecutar el comp-analysis-report y si el lanzamiento está activo
   tier1Users: list(process.env.TIER1_USERS || 'Andres,Carlos,Jaime'),
@@ -75,7 +75,7 @@ export const config = {
     const [modelo, esfuerzo] = v.split(':');
     return [pc.trim(), { modelo: (modelo || '').trim() || undefined, esfuerzo: (esfuerzo || '').trim() || undefined }];
   })),
-  // Tier 2: fases 1–4 en el PC ejecutor. Los skills cubren solo estos condados (Martin es excepción manual)
+  // Tier 2: fases 1–4 en el PC ejecutor. Los skills cubren solo estos condados (los demás condados quedan fuera del tablero)
   tier2SkillEnabled: bool(process.env.TIER2_SKILL_ENABLED, false),
   tier2Counties: list(process.env.TIER2_COUNTIES || 'Broward,Palm Beach'),
   timeZone: process.env.TZ_NEGOCIO || 'America/New_York',

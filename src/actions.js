@@ -308,7 +308,7 @@ export async function avanzar(id, a, usuario) {
 
 /**
  * Tier 1 -> Tier 2. Si el condado lo cubren los skills (Broward, Palm Beach) deja la orden de las
- * fases 1–4 para el PC; en otro condado (Martin) solo cambia la etapa: es excepción manual.
+ * fases 1–4 para el PC; en otro condado solo cambia la etapa (sin orden): es excepción manual.
  */
 export async function pasarATier2(id, body, usuario) {
   checkUser(usuario);

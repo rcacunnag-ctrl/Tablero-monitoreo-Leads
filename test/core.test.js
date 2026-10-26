@@ -152,7 +152,9 @@ test('reglas de entrada R2-R6', () => {
   assert.equal(classify({ street_address: null, arv_usd: 400000 }, {}).estado, ESTADOS.pendienteDireccion);
   assert.match(classify({ street_address: null, arv_usd: 400000 }, {}).alerta, /wholesaler/);
   assert.equal(classify({ street_address: '1 Main St' }, geoB).estado, ESTADOS.nuevo);
-  assert.equal(classify({ street_address: '1 Main St' }, { county: 'Martin' }).estado, ESTADOS.nuevo);
+  assert.match(classify({ street_address: '1 Main St' }, { county: 'Martin' }).descartar, /fuera de condado/); // solo Broward y Palm Beach
+  assert.match(classify({ street_address: null, arv_usd: 300000 }, { county: 'Miami-Dade' }).descartar, /fuera de condado/); // sin calle, ciudad de otro condado
+  assert.equal(classify({ street_address: null, arv_usd: 300000 }, { county: 'Broward' }).estado, ESTADOS.pendienteDireccion);
   assert.match(classify({ street_address: '1 Main St' }, { county: 'Miami-Dade' }).descartar, /fuera de condado/);
   assert.equal(classify({ street_address: '1 Main St' }, { county: null }).estado, ESTADOS.revisarCondado);
   assert.equal(classify({ street_address: '1 Main St' }, { county: 'Palm Beach', ambiguous: true }).estado, ESTADOS.revisarCondado);

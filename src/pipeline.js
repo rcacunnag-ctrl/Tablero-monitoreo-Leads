@@ -46,13 +46,16 @@ export function inTargetCounty(county) {
 
 /**
  * Reglas de entrada (docs/PLAN-FLUJO-LEADS.md):
- *  sin calle y sin ARV -> descartar | sin calle con ARV -> Pendiente dirección
+ *  sin calle y sin ARV -> descartar | sin calle con ARV -> Pendiente dirección (o descartar si la ciudad es de otro condado)
  *  con calle: condado objetivo -> Nuevo | otro condado -> descartar | sin determinar -> Revisar condado
  * @returns {{ estado: string, alerta?: string } | { descartar: string }}
  */
 export function classify(listing, geo) {
   if (!listing.street_address) {
-    return listing.arv_usd ? { estado: ESTADOS.pendienteDireccion, alerta: ALERTA_DIRECCION } : { descartar: 'sin dirección ni ARV' };
+    if (!listing.arv_usd) return { descartar: 'sin dirección ni ARV' };
+    // Sin calle pero con ciudad conocida: si es de otro condado tampoco entra
+    if (geo.county && !geo.ambiguous && !inTargetCounty(geo.county)) return { descartar: `fuera de condado (${geo.county})` };
+    return { estado: ESTADOS.pendienteDireccion, alerta: ALERTA_DIRECCION };
   }
   if (!geo.county || geo.ambiguous) return { estado: ESTADOS.revisarCondado };
   return inTargetCounty(geo.county) ? { estado: ESTADOS.nuevo } : { descartar: `fuera de condado (${geo.county})` };
