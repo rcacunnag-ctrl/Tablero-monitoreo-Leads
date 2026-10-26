@@ -137,7 +137,7 @@ async function leerCuenta(cuenta, imap, log, resumen) {
       ultimo = uid;
       await guardar();
       if (config.emailMarcarLeido) {
-        try { await imap.messageFlagsAdd(uid, ['\Seen'], { uid: true }); } catch (e) { log.warn?.(`Correo ${cuenta.id} UID ${uid}: no se pudo marcar como leído (${e.message})`); }
+        try { await imap.messageFlagsAdd(uid, ['\\Seen'], { uid: true }); } catch (e) { log.warn?.(`Correo ${cuenta.id} UID ${uid}: no se pudo marcar como leído (${e.message})`); }
       }
     }
   } finally {

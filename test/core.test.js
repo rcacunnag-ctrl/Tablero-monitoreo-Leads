@@ -814,7 +814,7 @@ test('correo: sondeo IMAP solo lee correos nuevos y llena el tablero con las mis
   buzon.push({ uid: 3, source: eml('c@x', 3) });
   assert.equal((await sondearCorreo({}, { cliente })).correos, 1);
   assert.deepEqual(calles(await listLeads()), ['100 Alpha Mail St', '200 Bravo Mail St', '300 Charlie Mail St']);
-  assert.deepEqual(cliente.vistos, [[1, '\Seen'], [2, '\Seen'], [3, '\Seen']]); // procesados -> marcados como leídos
+  assert.deepEqual(cliente.vistos, [[1, '\\Seen'], [2, '\\Seen'], [3, '\\Seen']]); // procesados -> marcados como leídos
   assert.equal(cliente.soloLectura, false);
   assert.equal(config.emailEnabled, false); // sin EMAIL_HOST/USER/PASS no arranca el sondeo
 });
