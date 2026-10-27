@@ -46,6 +46,10 @@ $scripts = Join-Path $Destino 'scripts'
 New-Item -ItemType Directory -Force -Path $scripts | Out-Null
 Copy-Item -Force (Join-Path $kit 'scripts\tier1-runner.ps1'), (Join-Path $kit 'scripts\subir-informe.ps1') $scripts
 Ok $scripts
+# Paquetes .skill de Tier 1 (comp-analysis-report y comp-analysis-report-terrenos): el runner los usa si Claude Desktop no los tiene sincronizados
+$skillsDir = Join-Path $Destino 'Skills Underwriting'
+New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+if (Get-ChildItem -LiteralPath $skillsDir -Filter 'comp-analysis-report*.skill' -ErrorAction SilentlyContinue) { Ok "$skillsDir (con paquetes .skill)" } else { Falta "Copiar comp-analysis-report.skill y comp-analysis-report-terrenos.skill a $skillsDir" }
 
 Write-Host "`n4. Tarea programada (cada 15 min, con la sesión de Windows iniciada)"
 # Alias estable de la Store (LOCALAPPDATA\Microsoft\WindowsApps): la ruta con versión (Program Files\WindowsApps\Microsoft.PowerShell_7.x...)
@@ -63,7 +67,7 @@ Ok "Tarea 'Monitor Tier1 - comp-analysis-report' -> órdenes de '$Ejecutor'"
 
 Write-Host "`n5. Pasos manuales que quedan" -ForegroundColor Cyan
 Write-Host "  a) En una terminal:  claude auth login   (con la cuenta de Claude de este PC)"
-Write-Host "  b) Claude Desktop con los skills de propiedades instalados (comp-analysis-report y fase-1 a fase-4); abrirlo una vez para que los sincronice."
+Write-Host "  b) Skills: Claude Desktop con los skills de propiedades instalados (comp-analysis-report y fase-1 a fase-4), o los .skill en $skillsDir (el runner usa el más reciente de los dos)."
 Write-Host "  c) Chrome con la extensión Claude conectada a la misma cuenta (fases 1 y 2 del Tier 2)."
 Write-Host "  d) Dejar el PC encendido con la sesión de Windows abierta y Tailscale conectado."
 Write-Host "  Log del ejecutor: $env:LOCALAPPDATA\MonitorTier1\"

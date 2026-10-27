@@ -12,7 +12,13 @@ param(
   [int]$MaxPorCorrida = 2,
   [string]$LeadsRoot = (Join-Path $env:USERPROFILE 'OneDrive\Documents\4. Ejecucion de procesos\1. Underwriting'),
   [int]$MercadoPorCorrida = 6,
-  [string]$MercadoModelo = 'claude-haiku-5-5'
+  [string]$MercadoModelo = 'claude-haiku-5-5',
+  # Carpetas con los paquetes .skill (respaldo si Claude Desktop no tiene el skill sincronizado en este PC)
+  [string[]]$SkillsDirs = @(
+    (Join-Path $env:USERPROFILE 'OneDrive\Documents\1. Proyecto Real State US\Skills Underwriting Propiedades'),
+    (Join-Path $env:USERPROFILE 'OneDrive\Documents\1. Proyecto Real State US\Skills Underwriting Terrenos'),
+    (Join-Path $env:USERPROFILE 'Documents\Monitor Underwriting\Skills Underwriting')
+  )
 )
 $ErrorActionPreference = 'Stop'
 # La salida de `claude` es UTF-8: sin esto, "Acuña" o "—" llegan deformados al panel ("Acu├▒a").
@@ -238,18 +244,46 @@ try {
 
 if ($pendientes.Count -eq 0) { exit 0 }
 
-# Skills de la cuenta que sincroniza la app de Claude (instalación normal o paquete de Microsoft Store)
-$bases = @(Join-Path $env:APPDATA 'Claude\local-agent-mode-sessions\skills-plugin') +
-  @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue |
-    ForEach-Object { Join-Path $_.FullName 'LocalCache\Roaming\Claude\local-agent-mode-sessions\skills-plugin' })
-$skill = foreach ($b in $bases | Where-Object { Test-Path -LiteralPath $_ }) {
-  foreach ($a in Get-ChildItem -LiteralPath $b -Directory) { foreach ($c in Get-ChildItem -LiteralPath $a.FullName -Directory) {
-    $s = Join-Path $c.FullName 'skills\comp-analysis-report\SKILL.md'
-    if (Test-Path -LiteralPath $s) { [pscustomobject]@{ Plugin = $c.FullName; Fecha = (Get-Item -LiteralPath $s).LastWriteTime } }
-  } }
+# Skills de Tier 1 (comp-analysis-report y su versión de terrenos), de dos orígenes; gana el más reciente:
+#  1) Claude Desktop (instalación normal o Microsoft Store): cualquier plugin sincronizado bajo sus carpetas de datos
+#  2) Paquetes .skill de $SkillsDirs: se descomprimen en MonitorTier1\skills-paquetes (solo si cambiaron)
+function Find-SkillDesktop {
+  $raices = @(Join-Path $env:APPDATA 'Claude') +
+    @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName 'LocalCache\Roaming\Claude' })
+  foreach ($r in $raices | Where-Object { Test-Path -LiteralPath $_ }) {
+    Get-ChildItem -LiteralPath $r -Recurse -Filter SKILL.md -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match '\skills\comp-analysis-report\SKILL\.md$' } |
+      ForEach-Object { [pscustomobject]@{ Plugin = $_.Directory.Parent.Parent.FullName; Fecha = $_.LastWriteTime; Origen = 'Claude Desktop' } }
+  }
 }
-$plugin = ($skill | Sort-Object Fecha -Descending | Select-Object -First 1).Plugin
-if (-not $plugin) { Log 'ERROR: no se encontró el skill comp-analysis-report sincronizado por la app de Claude'; exit 1 }
+function Find-SkillPaquetes {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  # Un solo plugin con todos los paquetes (propiedades y terrenos); si hay dos versiones del mismo, la más reciente
+  $paquetes = @($SkillsDirs | Where-Object { Test-Path -LiteralPath $_ } |
+    ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter 'comp-analysis-report*.skill' -File } |
+    Sort-Object LastWriteTime -Descending | Group-Object Name | ForEach-Object { $_.Group[0] })
+  if (-not $paquetes) { return }
+  $plugin = Join-Path $dir 'skills-paquetes'
+  $marca = Join-Path $plugin '.paquetes'
+  $firma = ($paquetes | Sort-Object Name | ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';'
+  if (-not ((Test-Path -LiteralPath $marca) -and ((Get-Content -LiteralPath $marca -Raw) -eq $firma))) {
+    if (Test-Path -LiteralPath $plugin) { Remove-Item -LiteralPath $plugin -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path (Join-Path $plugin '.claude-plugin'), (Join-Path $plugin 'skills') | Out-Null
+    # mismo nombre que el plugin de la cuenta, para que el skill siga llamándose anthropic-skills:comp-analysis-report
+    [IO.File]::WriteAllText((Join-Path $plugin '.claude-plugin/plugin.json'), '{"name":"anthropic-skills","version":"1.0.0","description":"Skills de Underwriting (paquetes .skill)"}')
+    foreach ($p in $paquetes) { [IO.Compression.ZipFile]::ExtractToDirectory($p.FullName, (Join-Path $plugin 'skills')) }
+    [IO.File]::WriteAllText($marca, $firma)
+    Log "skills extraídos: $($paquetes.Name -join ', ')"
+  }
+  if (Test-Path -LiteralPath (Join-Path $plugin 'skills/comp-analysis-report/SKILL.md')) {
+    [pscustomobject]@{ Plugin = $plugin; Fecha = ($paquetes | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime; Origen = "paquetes .skill ($($paquetes.Name -join ', '))" }
+  }
+}
+$skill = @(Find-SkillDesktop) + @(Find-SkillPaquetes) | Sort-Object Fecha -Descending | Select-Object -First 1
+$plugin = $skill.Plugin
+if (-not $plugin) { Log "ERROR: no se encontró el skill comp-analysis-report ni en Claude Desktop ni en paquetes .skill ($($SkillsDirs -join ' | '))"; exit 1 }
+Log "skill: $($skill.Origen) ($plugin)"
 
 New-Item -ItemType File -Force -Path $lock | Out-Null
 try {
