@@ -239,10 +239,10 @@ test('regla de antigüedad: 9 días sin Tier 1 ni gestión -> Descartados; no ap
   assert.equal(await actions.descartarVencidos(Date.now() + 25 * 36e5), 1);
   assert.ok(!(await leadsMod.listLeads()).some((l) => l.id === reciente.id));
   for (const l of [viejo, terreno, enTier1, editado]) await actions.descartar(l.id);
-  await actions.purgarDescartados(Date.now() + 49 * 36e5); // no deja nada en la papelera para otras pruebas
+  await actions.purgarDescartados(Date.now() + 121 * 36e5); // no deja nada en la papelera para otras pruebas
 });
 
-test('acciones: descartar va a la papelera 48 h, se recupera y bloquea reingreso; Tier 1 registra usuario', async () => {
+test('acciones: descartar va a la papelera 5 días, se recupera y bloquea reingreso; Tier 1 registra usuario', async () => {
   const [a, b, sinPrecio] = await leadsMod.addLeads([
     { estado: ESTADOS.nuevo, direccion: '10 A St', clave_direccion: '10 A ST 33311' },
     { estado: ESTADOS.nuevo, direccion: '20 B St', clave_direccion: '20 B ST 33311' },
@@ -259,10 +259,10 @@ test('acciones: descartar va a la papelera 48 h, se recupera y bloquea reingreso
   assert.ok((await leadsMod.listLeads()).some((l) => l.id === a.id));
   assert.equal((await leadsMod.loadLeads()).descartados['10 A ST 33311'], undefined);
   await assert.rejects(actions.recuperar(a.id, 'Carlos'), /no encontrado/);
-  // A las 48 h se borra: no deja ningún dato, solo la clave
+  // A las 5 días se borra: no deja ningún dato, solo la clave
   await actions.descartar(a.id, 'Carlos');
-  assert.equal(await actions.purgarDescartados(Date.now() + 47 * 36e5), 0);
-  assert.equal(await actions.purgarDescartados(Date.now() + 49 * 36e5), 1);
+  assert.equal(await actions.purgarDescartados(Date.now() + 119 * 36e5), 0);
+  assert.equal(await actions.purgarDescartados(Date.now() + 121 * 36e5), 1);
   const raw = JSON.parse(await fs.readFile(path.join(process.env.DATA_DIR, 'leads.json'), 'utf8'));
   assert.ok(raw.descartados['10 A ST 33311']);
   assert.ok(!JSON.stringify([raw.leads, raw.papelera]).includes('10 A St'));
@@ -568,10 +568,10 @@ test('informes: subir, servir aislado, vista pública y borrar al descartar', as
     await assert.rejects(guardarInforme(lead.id, { tier: 1, nombre: 'grande.pdf' }, Readable.from([Buffer.alloc(10)]), { maxBytes: 5 }), /supera/);
     assert.ok((await (await fetch(`${base}/api/leads`)).json()).disco);
 
-    // Descartado: el panel lo sigue mostrando (pestaña Descartados); se borra al vencer la papelera (48 h)
+    // Descartado: el panel lo sigue mostrando (pestaña Descartados); se borra al vencer la papelera (5 días)
     await actions.descartar(lead.id);
     assert.equal((await fetch(`${base}/informes/${lead.id}/${encodeURIComponent(nombre)}`)).status, 200);
-    await actions.purgarDescartados(Date.now() + 49 * 36e5);
+    await actions.purgarDescartados(Date.now() + 121 * 36e5);
     assert.equal((await fetch(`${base}/informes/${lead.id}/${encodeURIComponent(nombre)}`)).status, 404);
     await assert.rejects(fs.stat(path.join(process.env.DATA_DIR, 'informes', lead.id)));
   } finally {

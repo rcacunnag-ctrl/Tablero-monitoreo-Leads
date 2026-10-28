@@ -81,7 +81,7 @@ dialog label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var
 <div id="toast"></div>
 
 <script>
-// Pestañas: etapas que muestra y, en Nuevo, si son terrenos (T) o propiedades (P). Descartados: la papelera de 48 h.
+// Pestañas: etapas que muestra y, en Nuevo, si son terrenos (T) o propiedades (P). Descartados: la papelera de 5 días.
 const NUEVOS=['Nuevo','Pendiente dirección','Revisar condado','No califica'];
 const TABS={'Nuevo Propiedades':{e:NUEVOS,t:'P'},'Nuevo Terrenos':{e:NUEVOS,t:'T'},'Tier 1':{e:['Tier 1']},'Tier 2':{e:['Tier 2']},'Compra':{e:['Compra']},'Descartados':{e:[],d:1}};
 const PREVIOS=['Nuevo','Revisar condado','No califica'];
@@ -199,7 +199,7 @@ $('mapClose').onclick=()=>$('mapDlg').close();$('mapDlg').addEventListener('clos
 document.addEventListener('click',async ev=>{const t=ev.target.closest('[data-tab]');if(t){tab=t.dataset.tab;store.set('tab',tab);fillEstado();render();return}
  const m=ev.target.closest('[data-map]');if(m){const r=all.find(x=>x.id===m.dataset.map);if(r)openMap(r);return}
  const b=ev.target.closest('button[data-a]');if(!b||RO)return;const r=all.find(x=>x.id===b.dataset.id);if(!r)return;
- if(b.dataset.a==='descartar'){if(!confirm('¿Descartar este lead? Queda 48 h en Descartados (se puede recuperar); luego se borra y la dirección no volverá a entrar.'))return;try{await post(r.id,'descartar',{usuario:store.get('usuario')||''});toast('Lead descartado')}catch(e){toast(e.message)}return load()}
+ if(b.dataset.a==='descartar'){if(!confirm('¿Descartar este lead? Queda 5 días en Descartados (se puede recuperar); luego se borra y la dirección no volverá a entrar.'))return;try{await post(r.id,'descartar',{usuario:store.get('usuario')||''});toast('Lead descartado')}catch(e){toast(e.message)}return load()}
  openDlg(b.dataset.a,r)});
 ['estado','condado','dup'].forEach(id=>$(id).onchange=render);$('q').oninput=render;fillEstado();load();setInterval(load,60000);
 </script></body></html>`;

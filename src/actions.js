@@ -32,7 +32,7 @@ async function getLead(id) {
   return lead;
 }
 
-/** Pasa el lead a Descartados (48 h, recuperable). Sus informes se borran al vencer la papelera. */
+/** Pasa el lead a Descartados (5 días, recuperable). Sus informes se borran al vencer la papelera. */
 export async function descartar(id, usuario = '') {
   await discardLead(id, 'usuario', usuario);
   await exportOutputs();
@@ -51,7 +51,7 @@ const ultimaGestion = (l) => Math.max(0, ...[l.procesado_en || l.fecha_mensaje, 
 
 /**
  * Regla de antigüedad: un lead de propiedades que lleva DIAS_SIN_GESTION días (9) sin pasar a Tier 1 ni recibir
- * ninguna gestión (editar, agregar dirección o precio, recuperar) pasa a Descartados (48 h, recuperable).
+ * ninguna gestión (editar, agregar dirección o precio, recuperar) pasa a Descartados (5 días, recuperable).
  * No aplica a terrenos ni a leads que ya están en Tier 1, Tier 2 o Compra.
  */
 export async function descartarVencidos(ahora = Date.now(), { forzar = false } = {}) {
@@ -69,7 +69,7 @@ export async function descartarVencidos(ahora = Date.now(), { forzar = false } =
   return vencidos.length;
 }
 
-/** Borra los descartados de hace más de 48 h y sus informes. */
+/** Borra los descartados de hace más de 5 días y sus informes. */
 export async function purgarDescartados(ahora = Date.now()) {
   const ids = await purgarPapelera(ahora);
   for (const id of ids) await borrarInformes(id);

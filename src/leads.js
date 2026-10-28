@@ -1,4 +1,4 @@
-// Almacén de leads activos: data/leads.json. Los descartados pasan 48 h a `papelera` (recuperables) y luego
+// Almacén de leads activos: data/leads.json. Los descartados pasan 5 días a `papelera` (recuperables) y luego
 // se borran; su dirección normalizada queda en `descartados` para que no vuelvan a entrar si se republican.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -117,10 +117,10 @@ export function updateLead(id, patch) {
 }
 
 /** Horas que un lead descartado queda en la papelera (pestaña Descartados) antes de borrarse. */
-export const HORAS_PAPELERA = 48;
+export const HORAS_PAPELERA = 5 * 24;
 
 /**
- * Saca el lead de los activos y lo deja en la papelera 48 h (se puede recuperar). Su dirección
+ * Saca el lead de los activos y lo deja en la papelera 5 días (se puede recuperar). Su dirección
  * normalizada queda bloqueada para que no reingrese si se republica.
  */
 export function discardLead(id, motivo = 'usuario', usuario = '') {
@@ -156,7 +156,7 @@ export function recuperarLead(id, usuario) {
   });
 }
 
-/** Borra de la papelera los descartados hace más de 48 h. Devuelve sus id (para borrar sus informes). */
+/** Borra de la papelera los descartados hace más de 5 días. Devuelve sus id (para borrar sus informes). */
 export function purgarPapelera(ahora = Date.now()) {
   return withLeads((data) => {
     const limite = ahora - HORAS_PAPELERA * 36e5;

@@ -19,8 +19,8 @@ await ensureDirs();
 if (!listOnly) {
   await migrateLegacy();
   await refreshAlertas();
-  // Descartados: se borran a las 48 h (la papelera se revisa cada hora)
-  const purgar = () => descartarVencidos().then((n) => n && console.log(`Descartados por antigüedad sin gestión: ${n}`)).then(() => purgarDescartados()).then((n) => n && console.log(`Descartados borrados (48 h): ${n}`)).catch((e) => console.error(`Papelera: ${e.message}`));
+  // Descartados: se borran a las 5 días (la papelera se revisa cada hora)
+  const purgar = () => descartarVencidos().then((n) => n && console.log(`Descartados por antigüedad sin gestión: ${n}`)).then(() => purgarDescartados()).then((n) => n && console.log(`Descartados borrados (5 días): ${n}`)).catch((e) => console.error(`Papelera: ${e.message}`));
   await purgar();
   setInterval(purgar, 36e5).unref();
   startDashboard();
