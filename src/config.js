@@ -43,6 +43,8 @@ export const config = {
   emailMaxMensajeMb: Number(process.env.EMAIL_MAX_MENSAJE_MB || 25),
   emailMaxAdjuntoMb: Number(process.env.EMAIL_MAX_ADJUNTO_MB || 10),
   emailMaxPorPasada: Number(process.env.EMAIL_MAX_POR_PASADA || 50),
+  // Días sin gestión (sin Tier 1 ni cambios) tras los cuales un lead de propiedades pasa a Descartados (0 = desactivado)
+  diasSinGestion: Number(process.env.DIAS_SIN_GESTION ?? 9),
   emailMarcarLeido: process.env.EMAIL_MARCAR_LEIDO !== 'false', // única escritura en el buzón: la marca \Seen
   get emailEnabled() { return this.emailCuentas.length > 0; },
 

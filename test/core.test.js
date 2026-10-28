@@ -214,6 +214,34 @@ test('pipeline completo con extracción simulada y detección de duplicados', as
   assert.deepEqual(none, { rows: [], descartes: [] });
 });
 
+test('regla de antigüedad: 9 días sin Tier 1 ni gestión -> Descartados; no aplica a terrenos ni a Tier 1', async () => {
+  const hace = (d) => new Date(Date.now() - d * 864e5).toISOString();
+  const base = { estado: ESTADOS.nuevo, tipo: 'single_family' };
+  const [viejo, reciente, terreno, enTier1, editado, pendiente] = await leadsMod.addLeads([
+    { ...base, direccion: '1 Vieja St', clave_direccion: '1 VIEJA ST', procesado_en: hace(10) },
+    { ...base, direccion: '2 Nueva St', clave_direccion: '2 NUEVA ST', procesado_en: hace(8) },
+    { ...base, direccion: '3 Lote St', clave_direccion: '3 LOTE ST', tipo: 'land', procesado_en: hace(30) },
+    { ...base, direccion: '4 Tier St', clave_direccion: '4 TIER ST', estado: ESTADOS.tier1, procesado_en: hace(30) },
+    { ...base, direccion: '5 Edit St', clave_direccion: '5 EDIT ST', procesado_en: hace(30), cambios: [{ en: hace(2), usuario: 'Carlos', campos: ['precio_usd'] }] },
+    { ...base, direccion: '6 Pend St', clave_direccion: '6 PEND ST', estado: ESTADOS.pendienteDireccion, procesado_en: hace(12) },
+  ]);
+  assert.equal(await actions.descartarVencidos(), 2);
+  assert.equal(await actions.descartarVencidos(Date.now() + 36e5), 0); // una vez al día como máximo
+  const activos = (await leadsMod.listLeads()).map((l) => l.id);
+  assert.deepEqual([viejo, pendiente].filter((l) => activos.includes(l.id)), []);
+  assert.deepEqual([reciente, terreno, enTier1, editado].filter((l) => !activos.includes(l.id)), []);
+  const enPapelera = (await leadsMod.listPapelera()).find((l) => l.id === viejo.id);
+  assert.match(enPapelera.descartado_motivo, /sin gestión en 9 días/);
+  assert.equal(enPapelera.descartado_por, 'Automático');
+  // Recuperado: la cuenta empieza de nuevo
+  await actions.recuperar(viejo.id, 'Carlos');
+  // Al día siguiente sí vuelve a correr: '2 Nueva St' ya cumplió 9 días; el recuperado no (su cuenta empezó al recuperarlo)
+  assert.equal(await actions.descartarVencidos(Date.now() + 25 * 36e5), 1);
+  assert.ok(!(await leadsMod.listLeads()).some((l) => l.id === reciente.id));
+  for (const l of [viejo, terreno, enTier1, editado]) await actions.descartar(l.id);
+  await actions.purgarDescartados(Date.now() + 49 * 36e5); // no deja nada en la papelera para otras pruebas
+});
+
 test('acciones: descartar va a la papelera 48 h, se recupera y bloquea reingreso; Tier 1 registra usuario', async () => {
   const [a, b, sinPrecio] = await leadsMod.addLeads([
     { estado: ESTADOS.nuevo, direccion: '10 A St', clave_direccion: '10 A ST 33311' },

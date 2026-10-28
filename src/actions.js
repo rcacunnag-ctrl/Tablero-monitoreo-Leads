@@ -1,6 +1,8 @@
 // Acciones sobre un lead: descartar y recuperar, Tier 1 (manual o por criterios), agregar dirección y precio,
 // editar, inspección, Tier 2 y Compra.
-import { config } from './config.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { config, DATA_DIR } from './config.js';
 import { ESTADOS, listLeads, updateLead, discardLead, recuperarLead, purgarPapelera } from './leads.js';
 import { resolveManualAddress, computeAlerta, evaluarCriterios, pctArv } from './pipeline.js';
 import { lanzarCompAnalysis, setJobState } from './tier1.js';
@@ -42,6 +44,29 @@ export async function recuperar(id, usuario) {
   const lead = await recuperarLead(id, usuario);
   await exportOutputs();
   return { ok: true, resultado: 'recuperado', estado: lead.estado };
+}
+
+/** Última gestión del lead: entrada al tablero, recuperación o edición manual (lo más reciente). */
+const ultimaGestion = (l) => Math.max(0, ...[l.procesado_en || l.fecha_mensaje, l.recuperado?.en, ...(l.cambios || []).map((c) => c.en)].map((f) => Date.parse(f) || 0)) || Infinity; // sin ninguna fecha: no se toca
+
+/**
+ * Regla de antigüedad: un lead de propiedades que lleva DIAS_SIN_GESTION días (9) sin pasar a Tier 1 ni recibir
+ * ninguna gestión (editar, agregar dirección o precio, recuperar) pasa a Descartados (48 h, recuperable).
+ * No aplica a terrenos ni a leads que ya están en Tier 1, Tier 2 o Compra.
+ */
+export async function descartarVencidos(ahora = Date.now(), { forzar = false } = {}) {
+  if (!(config.diasSinGestion > 0)) return 0;
+  // Como máximo una vez al día (el servicio revisa cada hora; la última corrida queda guardada para que un reinicio no la repita)
+  const marca = path.join(DATA_DIR, 'antiguedad-state.json');
+  const ultima = Number(JSON.parse(await fs.readFile(marca, 'utf8').catch(() => '{}')).ultima) || 0;
+  if (!forzar && ahora - ultima < 24 * 36e5) return 0;
+  await fs.writeFile(marca, JSON.stringify({ ultima: ahora }));
+  const limite = ahora - config.diasSinGestion * 864e5;
+  const sinGestion = [ESTADOS.nuevo, ESTADOS.pendienteDireccion, ESTADOS.revisarCondado, ESTADOS.noCalifica];
+  const vencidos = (await listLeads()).filter((l) => sinGestion.includes(l.estado) && l.tipo !== 'land' && ultimaGestion(l) < limite);
+  for (const l of vencidos) await discardLead(l.id, `sin gestión en ${config.diasSinGestion} días`, USUARIO_AUTO);
+  if (vencidos.length) await exportOutputs();
+  return vencidos.length;
 }
 
 /** Borra los descartados de hace más de 48 h y sus informes. */
