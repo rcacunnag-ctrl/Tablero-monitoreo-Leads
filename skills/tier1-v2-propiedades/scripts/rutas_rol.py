@@ -83,8 +83,10 @@ def dir_datos_estado(con_origen=False):
 
     # Tier 1-V2: ProgramData va antes que LOCALAPPDATA. Los procesos que arranca el ejecutor (PowerShell de la Store)
     # no ven AppData\Local\underwriting-rol, y ahí el skill decía "roll not indexed" (2026-11-04).
-    for ruta, origen in ((os.path.join(os.environ.get("PROGRAMDATA", r"C:\ProgramData"), "underwriting-rol", "datos-estado"),
-                          "ProgramData (visible para el ejecutor)"),
+    # El rol vive dentro del proyecto del monitor (datos\rol), no en AppData: los procesos del ejecutor no lo ven allí.
+    for ruta, origen in ((os.path.join(os.environ.get("MONITOR_HOME", r"C:\monitor"), "datos", "rol"), "proyecto del monitor (datos\\rol)"),
+                         (os.path.join(os.environ.get("PROGRAMDATA", r"C:\ProgramData"), "underwriting-rol", "datos-estado"),
+                          "ProgramData (copia anterior)"),
                          (_por_defecto(), "ruta por defecto en LOCALAPPDATA"),
                          (HEREDADO, "carpeta heredada dentro de 0. Base formatos")):
         if os.path.isdir(ruta):

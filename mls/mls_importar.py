@@ -2,12 +2,12 @@
 """Importa las exportaciones semanales de Matrix (Beaches MLS, formato DataMaster_CSV) a una base local.
 
 Uso:
-    python mls_importar.py "C:\\MLS-semanal\\2026-11-09"            # todos los .zip/.csv de la carpeta
+    python mls_importar.py "C:\\monitor\\datos\\mls\\2026-11-09"   # todos los .zip/.csv de la carpeta
     python mls_importar.py archivo.zip --etiqueta oportunidades      # una exportación
 
 - Acepta el .zip que baja Matrix (un CSV + una foto por propiedad) o el CSV suelto.
-- Guarda en C:\\MLS-semanal\\mls.db (tabla `listado`: una fila por propiedad y semana, para ver cambios de precio entre
-  semanas) y la foto principal en C:\\MLS-semanal\\fotos\\<MLS#>.jpg. Nada sale de este PC.
+- Guarda en <proyecto>\\datos\\mls\\mls.db (tabla `listado`: una fila por propiedad y semana, para ver cambios de precio entre
+  semanas) y la foto principal en datos\\mls\\fotos\\<MLS#>.jpg. Nada sale de este PC.
 - Cada importación queda en `importaciones` (archivo, etiqueta, filas, fecha). Importar dos veces el mismo archivo no duplica.
 """
 import argparse
@@ -21,7 +21,7 @@ import sqlite3
 import sys
 import zipfile
 
-RAIZ = os.environ.get("MLS_SEMANAL", r"C:\MLS-semanal")
+RAIZ = os.environ.get("MLS_SEMANAL", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datos", "mls"))
 DB = os.path.join(RAIZ, "mls.db")
 FOTOS = os.path.join(RAIZ, "fotos")
 

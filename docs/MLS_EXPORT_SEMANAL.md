@@ -1,15 +1,15 @@
 # Exportación semanal de Matrix (Beaches MLS)
 
 Una persona con acceso a Matrix hace **una exportación por semana (lunes)** y deja los archivos en una carpeta. El agente
-trabaja con esos datos durante la semana: no vuelve a entrar al MLS. Los datos se quedan en este PC (`C:\MLS-semanal`,
+trabaja con esos datos durante la semana: no vuelve a entrar al MLS. Los datos se quedan en este PC (`C:\monitor\datos\mls`,
 fuera de OneDrive) y no se publican ni se comparten.
 
 **Uso medido:** máximo 3 o 4 exportaciones por semana, con pausas normales entre pasos. No repetir exportaciones iguales.
 Para uso interno de análisis de inversión; respetar las reglas de uso de datos de Beaches MLS.
 
 ## Antes de empezar (una vez)
-1. Crear la carpeta `C:\MLS-semanal` (ya existe en el PC de Roberto).
-2. Cada lunes, crear una subcarpeta con la fecha: `C:\MLS-semanal\2026-11-09`.
+1. La carpeta de trabajo es `C:\monitor\datos\mls` (ya existe en el PC de Roberto; es parte del proyecto del monitor).
+2. Cada lunes, crear una subcarpeta con la fecha: `C:\monitor\datos\mls\2026-11-09`.
 
 ## Las exportaciones de cada semana
 Todas se hacen igual: **Matrix → SEARCH → Residential**, se rellenan los criterios de la tabla, se abre **Results**,
@@ -36,12 +36,12 @@ se marcan todos los resultados y se exporta en formato **DataMaster_CSV** (pasos
 7. Abajo, en la barra *Actions*, pulsar **Export**.
 8. **Export file format**: elegir **DataMaster_CSV** (el único que trae superficie, comentarios, folio y foto). Pulsar **Export**.
 9. El navegador baja `DataMaster_CSV.zip`. Si Edge pregunta si se conserva, elegir **Mantener / Keep**.
-10. Mover el archivo a `C:\MLS-semanal\<fecha>\` y renombrarlo según la tabla (`A-oportunidades.zip`, etc.).
+10. Mover el archivo a `C:\monitor\datos\mls\<fecha>\` y renombrarlo según la tabla (`A-oportunidades.zip`, etc.).
 
 No abrir los .zip ni descomprimirlos a mano: el importador los lee tal cual.
 
 ## Importar
-Doble clic en `C:\MLS-semanal\IMPORTAR.cmd` (usa la carpeta con la fecha más reciente). Imprime cuántos registros cargó por
+Doble clic en `C:\monitor\datos\mls\IMPORTAR.cmd` (usa la carpeta con la fecha más reciente). Imprime cuántos registros cargó por
 archivo, los códigos postales sin historial de ventas y las propiedades nuevas de la semana. Importar el mismo archivo dos
 veces no duplica nada.
 

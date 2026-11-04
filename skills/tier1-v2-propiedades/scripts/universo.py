@@ -19,6 +19,8 @@ import math
 import os
 import re
 import sys
+import time
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -67,14 +69,45 @@ def geocodificar(filas):
     req = urllib.request.Request("https://geocoding.geo.census.gov/geocoder/locations/addressbatch", data=datos,
                                  headers={"Content-Type": f"multipart/form-data; boundary={borde}", "User-Agent": "tier1-v2"})
     out = {}
-    try:
-        with urllib.request.urlopen(req, timeout=90) as r:
-            for fila in csv.reader(io.StringIO(r.read().decode("utf-8", "replace"))):
-                if len(fila) >= 6 and fila[2] == "Match" and "," in fila[5]:
-                    lon, lat = fila[5].split(",")
-                    out[fila[0]] = (float(lat), float(lon))
-    except Exception as e:  # sin red o servicio caído: el informe lo dice, no se inventan coordenadas
-        print(f"AVISO geocodificación: {e}", file=sys.stderr)
+    for intento, espera in enumerate((0, 5)):  # el servicio del Census responde 502 de vez en cuando
+        time.sleep(espera)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                for fila in csv.reader(io.StringIO(r.read().decode("utf-8", "replace"))):
+                    if len(fila) >= 6 and fila[2] == "Match" and "," in fila[5]:
+                        lon, lat = fila[5].split(",")
+                        out[fila[0]] = (float(lat), float(lon))
+            return out
+        except Exception as e:  # sin red o servicio caído: el informe lo dice, no se inventan coordenadas
+            print(f"AVISO geocodificación (intento {intento + 1}): {e}", file=sys.stderr)
+    return out
+
+
+CATASTRO = ("https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0/query")
+
+
+def coords_catastro(por_id):
+    """{id: folio} -> {id: (lat, lon)}: centro de la parcela en el catastro estatal (rápido, sin límite de lote y con el
+    mismo folio del rol, así que no depende de que el geocodificador entienda la dirección)."""
+    inv = {}
+    for i, f in por_id.items():
+        if f:
+            inv.setdefault(str(f), []).append(i)
+    out = {}
+    folios = list(inv)
+    for k in range(0, len(folios), 100):
+        trozo = folios[k:k + 100]
+        datos = urllib.parse.urlencode({"where": "PARCEL_ID IN (%s)" % ",".join(f"'{x}'" for x in trozo), "outFields": "PARCEL_ID",
+                                        "returnGeometry": "true", "outSR": "4326", "f": "json"}).encode()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(CATASTRO, data=datos, headers={"User-Agent": "tier1-v2"}), timeout=40) as r:
+                for ft in json.loads(r.read().decode("utf-8")).get("features", []):
+                    anillo = ft["geometry"]["rings"][0]
+                    c = (sum(p[1] for p in anillo) / len(anillo), sum(p[0] for p in anillo) / len(anillo))
+                    for i in inv.get(str(ft["attributes"]["PARCEL_ID"]), []):
+                        out[i] = c
+        except Exception as e:
+            print(f"AVISO catastro: {e}", file=sys.stderr)
     return out
 
 
@@ -165,7 +198,10 @@ def main():
 
     # Coordenadas (Census por lotes): sujeto + candidatas
     pedidos = [("S", calle, ciudad, zip_)] + [(str(i), f["PHY_ADDR1"], f["PHY_CITY"], str(int(f["PHY_ZIPCD"] or 0))) for i, f in enumerate(filas)]
-    coords = geocodificar(pedidos)
+    coords = coords_catastro({**({"S": sujeto.get("folio")} if sujeto.get("folio") else {}), **{str(i): f["PARCEL_ID"] for i, f in enumerate(filas)}})
+    faltan = [p for p in pedidos if str(p[0]) not in coords]
+    if faltan:
+        coords.update(geocodificar(faltan))
     if "S" in coords:
         sujeto["lat"], sujeto["lng"] = coords["S"]
     # Radio: el pedido; si hay menos de 8 ventas dentro, se amplía a --radio-max y se dice
