@@ -90,6 +90,9 @@ export const config = {
   // Tier 2: fases 1–4 en el PC ejecutor. Los skills cubren solo estos condados (los demás condados quedan fuera del tablero)
   tier2SkillEnabled: bool(process.env.TIER2_SKILL_ENABLED, false),
   tier2Counties: list(process.env.TIER2_COUNTIES || 'Broward,Palm Beach'),
+  // PCs que pueden correr Tier 2 (el resto lo tiene instalado pero deshabilitado: no se le asignan órdenes ni se le entregan las que haya).
+  // Se habilita un PC agregándolo aquí y reiniciando el monitor. Por defecto, todos los ejecutores.
+  tier2Ejecutores: list(process.env.TIER2_EJECUTORES || process.env.EJECUTORES || 'Roberto,Andres'),
   timeZone: process.env.TZ_NEGOCIO || 'America/New_York',
 
   // Avisos por WhatsApp (mismo número) al grupo NOTIF_GRUPO: un resumen en cada horario de NOTIF_HORARIOS (hora de NOTIF_TZ)

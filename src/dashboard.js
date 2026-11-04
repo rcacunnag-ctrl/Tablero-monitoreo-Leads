@@ -58,7 +58,7 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
       }
       if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', PAGE);
       if (url.pathname === '/api/leads') {
-        const body = { leads: await listLeads(), descartados: await listPapelera(), tipos: TIPOS, condados: config.targetCounties, usuarios: config.tier1Users, ejecutores: config.ejecutores, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
+        const body = { leads: await listLeads(), descartados: await listPapelera(), tipos: TIPOS, condados: config.targetCounties, usuarios: config.tier1Users, ejecutores: config.ejecutores, ejecutoresT2: config.tier2Ejecutores, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
         return send(res, 200, 'application/json', JSON.stringify(body));
       }
       if (url.pathname === '/api/tier1-jobs') {

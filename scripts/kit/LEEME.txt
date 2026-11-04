@@ -1,0 +1,18 @@
+KIT - PC EJECUTOR DE INFORMES (Monitor de Propiedades)   [instalar o actualizar]
+
+1. Descomprime esta carpeta en cualquier lugar (p. ej. Descargas, carpeta Kit-PC-Andres).
+2. Abre PowerShell 7 (pwsh) en esa carpeta y corre:
+     pwsh -ExecutionPolicy Bypass -File .\scripts\instalar-ejecutor.ps1 -Ejecutor Andres
+   Sirve para instalar por primera vez y para actualizar una instalacion anterior (se puede repetir).
+3. Si marca algo como FALTA, instalalo y vuelve a correr el paso 2.
+4. Pasos manuales (los indica el script al final):
+   a) claude auth login   (tu cuenta de Claude)
+   b) Claude Desktop abierto una vez (los skills tambien llegan por los paquetes .skill del kit)
+   c) Chrome con la extension Claude conectada
+   d) PC encendido, sesion de Windows abierta y Tailscale conectado
+
+Que queda activo: Tier 1. Que queda instalado pero apagado: Tier 2 (lo habilita Roberto desde el servidor).
+Los informes que pidan en el panel con "Ejecutar en: PC Andres" corren en este PC y quedan en
+Documentos\Monitor Underwriting\1. Underwriting\1. Propiedades - Leads.
+
+Guia completa para una sesion de Claude Code en este PC: INSTALACION-PC-ANDRES.md

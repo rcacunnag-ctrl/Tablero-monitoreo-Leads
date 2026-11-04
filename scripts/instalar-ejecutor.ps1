@@ -1,4 +1,4 @@
-# Instala un PC adicional que ejecuta informes del Monitor (Tier 1 y Tier 2), p. ej. el de Andres.
+# Instala o ACTUALIZA un PC adicional que ejecuta informes del Monitor (Tier 1 y Tier 2), p. ej. el de Andres. Se puede repetir.
 # Se corre UNA vez en ese PC, desde la carpeta descomprimida del kit, en PowerShell 7 (pwsh):
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\instalar-ejecutor.ps1 -Ejecutor Andres
 # Deja: carpetas de trabajo con "0. Base formatos", el Intake Service local (Tier 2), los scripts del
@@ -46,10 +46,16 @@ $scripts = Join-Path $Destino 'scripts'
 New-Item -ItemType Directory -Force -Path $scripts | Out-Null
 Copy-Item -Force (Join-Path $kit 'scripts\tier1-runner.ps1'), (Join-Path $kit 'scripts\subir-informe.ps1') $scripts
 Ok $scripts
-# Paquetes .skill de Tier 1 (comp-analysis-report y comp-analysis-report-terrenos): el runner los usa si Claude Desktop no los tiene sincronizados
+# Paquetes .skill (Tier 1, Tier 2 y Tier 1-V2): el runner y el Intake los usan si Claude Desktop no los tiene sincronizados
 $skillsDir = Join-Path $Destino 'Skills Underwriting'
 New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
-if (Get-ChildItem -LiteralPath $skillsDir -Filter 'comp-analysis-report*.skill' -ErrorAction SilentlyContinue) { Ok "$skillsDir (con paquetes .skill)" } else { Falta "Copiar comp-analysis-report.skill y comp-analysis-report-terrenos.skill a $skillsDir" }
+$delKit = Join-Path $kit 'Skills Underwriting'
+if (Test-Path -LiteralPath $delKit) { Copy-Item -Force (Join-Path $delKit '*.skill') $skillsDir }
+if (Get-ChildItem -LiteralPath $skillsDir -Filter 'comp-analysis-report*.skill' -ErrorAction SilentlyContinue) { Ok "$skillsDir ($((Get-ChildItem -LiteralPath $skillsDir -Filter *.skill).Count) paquetes .skill)" } else { Falta "Faltan los paquetes .skill del kit en $skillsDir" }
+# El rol estatal de Florida (opcional, 820 MB) vive dentro de este mismo proyecto, no en AppData: no se construye hasta que Roberto lo pida
+$rolDir = Join-Path $Destino 'datos\rol'
+Set-Content -Path (Join-Path $under '0. Base formatos\datos-estado.ruta.txt') -Value $rolDir -Encoding utf8
+Ok "Rol estatal (si se necesita): $rolDir"
 
 Write-Host "`n4. Tarea programada (cada 15 min, con la sesión de Windows iniciada)"
 # Alias estable de la Store (LOCALAPPDATA\Microsoft\WindowsApps): la ruta con versión (Program Files\WindowsApps\Microsoft.PowerShell_7.x...)

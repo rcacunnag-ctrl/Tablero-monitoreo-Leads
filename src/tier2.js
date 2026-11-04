@@ -36,6 +36,7 @@ export async function lanzarTier2(lead, usuario, { comparables = 12, enabled = c
 }
 
 export async function listTier2Jobs({ estado, ejecutor } = {}) {
+  if (ejecutor && !config.tier2Ejecutores.includes(ejecutor)) return []; // PC con Tier 2 instalado pero deshabilitado
   const files = await fs.readdir(config.dirs.tier2Jobs).catch(() => []);
   const jobs = [];
   for (const f of files.filter((n) => n.endsWith('.json'))) jobs.push(JSON.parse(await fs.readFile(path.join(config.dirs.tier2Jobs, f), 'utf8')));

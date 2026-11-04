@@ -340,7 +340,8 @@ export async function pasarATier2(id, body, usuario) {
   const lead = await getLead(id);
   if (lead.estado !== ESTADOS.tier1) throw badRequest('Solo un lead en Tier 1 puede pasar a Tier 2');
   const comparables = Number(body.comparables || 12);
-  const pc = checkEjecutor(body.ejecutor || config.ejecutores[0]);
+  const pc = checkEjecutor(body.ejecutor || config.tier2Ejecutores[0]);
+  if (!config.tier2Ejecutores.includes(pc)) throw badRequest(`Tier 2 está deshabilitado en el PC ${pc}. Habilitados: ${config.tier2Ejecutores.join(', ')}`);
   if (!COMPARABLES.includes(comparables)) throw badRequest(`Comparables: ${COMPARABLES.join(', ')}`);
   const cubierto = config.tier2Counties.some((c) => c.toLowerCase() === String(lead.condado || '').toLowerCase());
   const updated = await updateLead(id, { estado: ESTADOS.tier2, tier2_usuario: usuario, tier2_en: new Date().toISOString(), tier2_comparables: comparables, tier2_ejecutor: pc });

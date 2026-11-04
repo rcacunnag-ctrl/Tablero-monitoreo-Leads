@@ -628,6 +628,25 @@ test('avisos por WhatsApp: resumen a las 11:00 y 17:30 (Colombia), solo novedade
   }
 });
 
+test('Tier 2 deshabilitado por PC: no se asigna ni se entrega hasta habilitarlo', async () => {
+  const { config } = await import('../src/config.js');
+  const { listTier2Jobs } = await import('../src/tier2.js');
+  const antes = config.tier2Ejecutores;
+  try {
+    config.tier2Ejecutores = ['Roberto'];
+    const [l] = await leadsMod.addLeads([{ estado: ESTADOS.tier1, direccion: '77 T2PC St', clave_direccion: '77 T2PC ST', condado: 'Palm Beach', precio_usd: 200000, arv_usd: 300000 }]);
+    await assert.rejects(actions.pasarATier2(l.id, { ejecutor: 'Andres' }, 'Carlos'), /Tier 2 está deshabilitado en el PC Andres/);
+    assert.deepEqual(await listTier2Jobs({ ejecutor: 'Andres' }), []);
+    config.tier2Ejecutores = ['Roberto', 'Andres']; // "habilitar" = agregarlo a TIER2_EJECUTORES
+    const r = await actions.pasarATier2(l.id, { ejecutor: 'Andres' }, 'Carlos');
+    assert.equal(r.skill?.ejecutor ?? 'Andres', 'Andres');
+    await actions.descartar(l.id);
+    await actions.purgarDescartados(Date.now() + 121 * 36e5);
+  } finally {
+    config.tier2Ejecutores = antes;
+  }
+});
+
 test('Tier 2: orden por fases para el Intake, avance, error, reintento y condado no cubierto', async () => {
   const { config } = await import('../src/config.js');
   const { listTier2Jobs } = await import('../src/tier2.js');
