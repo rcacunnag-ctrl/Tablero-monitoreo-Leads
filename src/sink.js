@@ -7,7 +7,7 @@ import { listLeads } from './leads.js';
 import { writeVista } from './vista.js';
 
 export const COLUMNS = [
-  'estado', 'alerta', 'pct_arv', 'criterio', 'mercado_estado', 'mercado_precio', 'mercado_publicado', 'mercado_dias', 'mercado_reducciones', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado',
+  'estado', 'alerta', 'pct_arv', 'criterio', 'mercado_estado', 'mercado_precio', 'mercado_publicado', 'mercado_dias', 'mercado_reducciones', 'tier1_usuario', 'tier1_en', 'tier1_auto', 'tier1_ejecutor', 'informe_estado', 'v2_veredicto', 'v2_score', 'v2_mao', 'v2_arv',
   'inspeccion_se_hace', 'inspeccion_ejecutada', 'inspeccion_obs', 'inspeccion_usuario', 'inspeccion_en',
   'tier2_usuario', 'tier2_en', 'tier2_ejecutor', 'tier2_comparables', 'tier2_fase', 'tier2_estado', 'tier2_detalle', 'compra_usuario', 'compra_en', 'fecha_mensaje', 'grupo', 'autor', 'condado',
   'estado_direccion', 'direccion', 'ciudad', 'zip', 'direccion_verificada', 'metodo_condado',
@@ -18,7 +18,8 @@ export const COLUMNS = [
 
 /** Campos del estado en el mercado (objeto `mercado`) como columnas planas. */
 const fila = (r) => ({ ...r, mercado_estado: r.mercado?.estado, mercado_precio: r.mercado?.precio_lista, mercado_publicado: r.mercado?.fecha_publicacion,
-  mercado_dias: r.mercado?.dias_en_mercado, mercado_reducciones: r.mercado?.reducciones?.length });
+  mercado_dias: r.mercado?.dias_en_mercado, mercado_reducciones: r.mercado?.reducciones?.length,
+  v2_veredicto: r.v2?.veredicto, v2_score: r.v2?.score, v2_mao: r.v2?.mao, v2_arv: r.v2?.arv });
 const toCell = (v) => (v === null || v === undefined ? '' : Array.isArray(v) ? v.join('\n') : v);
 const csvLine = (vals) => vals.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',');
 

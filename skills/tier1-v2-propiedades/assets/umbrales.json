@@ -1,0 +1,27 @@
+{
+  "_nota": "Supuestos y umbrales del Tier 1-V2. Todo lo que no viene del lead ni de una fuente sale de aquí y se etiqueta ASSUMED en el informe.",
+  "ganancia_objetivo_usd": 35000,
+  "meses_tenencia": 7,
+  "cierre_compra_pct": 0.02,
+  "venta_pct": 0.065,
+  "tenencia_detalle": "property tax 1.8% and insurance 1.0% of the price a year, plus $200 a month for utilities and lawn",
+  "rehab_usd_por_sf": {
+    "full": 70,
+    "moderate": 45,
+    "light": 25,
+    "unknown": 70
+  },
+  "rehab_minimo_usd": 20000,
+  "rehab_liviano_factor": 0.6,
+  "arv_alto_factor": 1.07,
+  "negociable_brecha_max": 0.25,
+  "condiciones_ganancia_min_pct_objetivo": 0.4,
+  "condiciones_brecha_max": 0.12,
+  "comps_renovados_minimos": 2,
+  "radio_millas": 1.5,
+  "rol_antiguedad_aviso_dias": 60,
+  "tenencia_fija_mensual_usd": 200,
+  "tenencia_pct_anual": 0.028,
+  "rehab_factor_precio_ref_ppsf": 300,
+  "rehab_factor_max": 1.5
+}

@@ -60,6 +60,15 @@ export const config = {
   // Tier 1: usuarios que pueden ejecutar el comp-analysis-report y si el lanzamiento está activo
   tier1Users: list(process.env.TIER1_USERS || 'Andres,Carlos,Jaime'),
   tier1SkillEnabled: bool(process.env.TIER1_SKILL_ENABLED, false),
+  // Skill que corre cada orden de Tier 1 (comp-analysis-report = el actual; tier1-v2-propiedades = Tier 1-V2). Reversible cambiando esta variable.
+  tier1Skill: (process.env.TIER1_SKILL || 'comp-analysis-report').trim(),
+  // Tier 1-V2 en paralelo (src/v2.js): cola derivada de los leads con dirección y precio. Solo el PC de V2_EJECUTOR la recibe
+  // (el que tiene el rol estatal indexado). V2_MODELO = modelo:esfuerzo de las órdenes; V2_MAX_DIA = análisis que pueden empezar por día.
+  v2Enabled: bool(process.env.V2_ENABLED, false),
+  v2Ejecutor: (process.env.V2_EJECUTOR || 'Roberto').trim(),
+  v2Skill: 'tier1-v2-propiedades',
+  v2MaxDia: Number(process.env.V2_MAX_DIA || 20),
+  v2Modelo: (process.env.V2_MODELO || 'claude-sonnet-5-5:medium').trim(),
   // Criterios de Tier 1 automático: % of ARV = precio / ARV * 100 <= CRIT_PCT_ARV_MAX y precio < CRIT_PRECIO_MAX
   critPctArvMax: Number(process.env.CRIT_PCT_ARV_MAX || 75),
   critPrecioMax: Number(process.env.CRIT_PRECIO_MAX || 300000),

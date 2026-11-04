@@ -747,6 +747,55 @@ test('reposts y correcciones del wholesaler; "West Palm Beach" sin coma', async 
   assert.equal(r3.length, 2);
 });
 
+test('tier 1-V2: cola derivada de los leads, cupo diario, reporte y reintentos', async () => {
+  const { listV2Jobs, reportarV2, elegibleV2 } = await import('../src/v2.js');
+  const { config } = await import('../src/config.js');
+  config.v2Enabled = true; config.v2Ejecutor = 'Roberto'; config.v2MaxDia = 2;
+  const base = { estado: ESTADOS.nuevo, condado: 'Palm Beach', tipo: 'single_family', precio_usd: 300000 };
+  const [a, b, c, terreno, sinPrecio, otroCondado] = await leadsMod.addLeads([
+    { ...base, direccion: '1 V2 St', clave_direccion: '1 V2 ST', procesado_en: '2026-11-01T10:00:00Z' },
+    { ...base, direccion: '2 V2 St', clave_direccion: '2 V2 ST', procesado_en: '2026-11-02T10:00:00Z' },
+    { ...base, direccion: '3 V2 St', clave_direccion: '3 V2 ST', procesado_en: '2026-11-03T10:00:00Z' },
+    { ...base, direccion: '4 V2 St', clave_direccion: '4 V2 ST', tipo: 'land' },
+    { ...base, direccion: '5 V2 St', clave_direccion: '5 V2 ST', precio_usd: null },
+    { ...base, direccion: '6 V2 St', clave_direccion: '6 V2 ST', condado: 'Miami-Dade' },
+  ]);
+  const mios = new Set([a, b, c, terreno, sinPrecio, otroCondado].map((l) => l.id));
+  const cola = async () => (await listV2Jobs({ ejecutor: 'Roberto' })).filter((j) => mios.has(j.id)).map((j) => j.id); // otras pruebas dejan leads con dirección
+  assert.deepEqual([a, terreno, sinPrecio, otroCondado].map(elegibleV2), [true, false, false, false]);
+  assert.deepEqual(await listV2Jobs({ ejecutor: 'Andres' }), []); // solo el PC de V2_EJECUTOR
+  const jobs = await listV2Jobs({ ejecutor: 'Roberto' });
+  assert.deepEqual(jobs.map((j) => j.id), [c.id, b.id]); // más nuevos primero, con cupo de 2 al día
+  assert.equal(jobs[0].skill, 'tier1-v2-propiedades');
+  assert.equal(jobs[0].modelo, 'claude-sonnet-5-5');
+  assert.equal(jobs[0].lead.direccion.startsWith('3 V2 St'), true);
+  // Empieza uno y termina: no vuelve a la cola, y el cupo del día lo cuenta
+  await reportarV2(c.id, { estado: 'en_proceso' });
+  await reportarV2(c.id, { estado: 'listo', ruta: '/x', detalle: 'ok', resultado: { veredicto: 'Do not advance', score: 17, mao: 246000, arv: 415000, ganancia: -78000, confianza: 'medium', provisional: false } });
+  const lc = (await leadsMod.listLeads()).find((l) => l.id === c.id);
+  assert.equal(lc.v2.estado, 'listo');
+  assert.equal(lc.v2.veredicto, 'Do not advance');
+  assert.equal(lc.v2.mao, 246000);
+  assert.equal(lc.estado, ESTADOS.nuevo); // no cambia la etapa del lead
+  await reportarV2(b.id, { estado: 'en_proceso' });
+  assert.deepEqual((await listV2Jobs({ ejecutor: 'Roberto' })).map((j) => j.id), []); // cupo diario agotado (2 empezados hoy)
+  config.v2MaxDia = 20;
+  assert.deepEqual(await cola(), [a.id]); // b está en proceso; c ya está listo
+  // Errores: reintenta hasta 3 veces
+  for (let i = 0; i < 3; i++) await reportarV2(a.id, { estado: 'error', detalle: 'sin red' });
+  assert.deepEqual(await cola(), []);
+  // Si cambia el precio, el análisis anterior ya no vale
+  await leadsMod.updateLead(c.id, { precio_usd: 280000 });
+  assert.deepEqual(await cola(), [c.id]);
+  await assert.rejects(reportarV2(c.id, { estado: 'raro' }), /Estado no válido/);
+  await assert.rejects(reportarV2('no-existe', { estado: 'listo' }), /no encontrado/);
+  // Con V2 apagado no hay cola
+  config.v2Enabled = false;
+  assert.deepEqual(await listV2Jobs({ ejecutor: 'Roberto' }), []);
+  for (const l of [a, b, c, terreno, sinPrecio, otroCondado]) await actions.descartar(l.id);
+  await actions.purgarDescartados(Date.now() + 121 * 36e5);
+});
+
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {
   const { config } = await import('../src/config.js');
   const m = await import('../src/mercado.js');

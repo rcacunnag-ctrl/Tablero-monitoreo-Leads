@@ -32,7 +32,7 @@ function validar(id, nombre) {
 
 const archivo = (id, nombre) => path.join(config.dirs.informes, id, nombre);
 
-const ETIQUETAS = [[/\.html$/i, 'Dashboard'], [/Informe_Completo/i, 'Comparables (completo)'], [/Ejecutivo/i, 'Comparables (ejecutivo)'], [/Alertas/i, 'Alertas'], [/Decision/i, 'Decisión']];
+const ETIQUETAS = [[/tier1-v2\.html$/i, 'Tier 1-V2'], [/\.html$/i, 'Dashboard'], [/Informe_Completo/i, 'Comparables (completo)'], [/Ejecutivo/i, 'Comparables (ejecutivo)'], [/Alertas/i, 'Alertas'], [/Decision/i, 'Decisión']];
 /** Nombre legible del entregable (el mismo criterio que usa el panel). */
 export const etiquetaInforme = (nombre) => (ETIQUETAS.find(([re]) => re.test(nombre)) || [0, nombre])[1];
 

@@ -6,7 +6,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
 
-export const SKILL_TIER1 = 'comp-analysis-report';
 export const ESTADOS_ORDEN = ['pendiente', 'en_proceso', 'listo', 'error'];
 
 const jobFile = (id) => path.join(config.dirs.tier1Jobs, `${path.basename(id)}.json`);
@@ -37,7 +36,7 @@ export async function lanzarCompAnalysis(lead, usuario, { enabled = config.tier1
   const now = new Date().toISOString();
   const job = {
     id: lead.id,
-    skill: SKILL_TIER1,
+    skill: config.tier1Skill,
     usuario,
     auto,
     ejecutor,
