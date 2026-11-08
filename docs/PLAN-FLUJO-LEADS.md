@@ -213,6 +213,7 @@ Un buzón dedicado (Colombia Hosting, cPanel; `mail.haitech-consulting.com:993`)
 ## Leads de MLS (Matrix) — 2026-11-07
 Fuente semanal además de WhatsApp y correo (`src/mls.js`, `mls/mls_importar.py --publicar`, instrucciones en `docs/MLS_EXPORT_SEMANAL.md`).
 - Entrada: `POST /api/mls-leads` con las propiedades ya filtradas y sus señales (origen `MLS`, grupo «MLS Matrix», tipo casa, sin ARV).
-- **Con señal de negociación** (condición especial, Listing Terms de financiamiento, comentarios de vendedor motivado o de financiamiento): visible desde el inicio.
-- **Sin señal**: oculta (`mls_oculto`) hasta que el Tier 1-V2 dé `MLS_SCORE_MIN` (60) o más; con menos pasa a Descartados con el puntaje. Reentra si el precio baja 5 % o más.
+- Todo entra a una **cola oculta** (`mls_cola`, sin Tier 1-V2). Desde `MLS_LIBERAR_DESDE` se sueltan `MLS_LIBERAR_DIA` (10) por día, primero los que tienen señal (`liberarMls`, cada hora).
+- **Con señal de negociación** (condición especial, Listing Terms de financiamiento, comentarios de vendedor motivado o de financiamiento): al liberarse quedan visibles y el V2 los puntúa.
+- **Sin señal**: al liberarse siguen ocultas (`mls_oculto`) hasta que el Tier 1-V2 dé `MLS_SCORE_MIN` (60) o más; con menos pasa a Descartados con el puntaje. Reentra a la cola si el precio baja 5 % o más.
 - No pasa por el Tier 1 automático ni por la consulta de mercado; el panel, el Excel y los avisos solo muestran los visibles. La pestaña Oportunidades suma los de MLS con señal.

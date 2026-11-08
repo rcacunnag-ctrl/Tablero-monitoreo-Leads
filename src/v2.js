@@ -23,7 +23,7 @@ const dia = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: confi
 export const elegibleV2 = (l) => Boolean(l.direccion && Number(l.precio_usd) > 0 && !TIPOS_NO.has(l.tipo) && config.targetCounties.includes(l.condado));
 
 function pendienteV2(l, ahora) {
-  if (!elegibleV2(l)) return false;
+  if (!elegibleV2(l) || l.mls_cola) return false; // los de MLS en cola esperan su turno (src/mls.js)
   const v = l.v2;
   if (!v || v.firma !== firmaV2(l)) return true;
   if (v.estado === 'listo') return false;
@@ -68,7 +68,7 @@ export async function reportarV2(id, body = {}) {
   }
   await updateLead(id, { v2 });
   let mls;
-  if (body.estado === 'listo' && lead.mls_oculto) mls = await resolverMlsOculto({ ...lead, v2 }, v2.score); // leads de MLS sin señal: se muestran si puntúan
+  if (body.estado === 'listo' && lead.mls_oculto && !lead.mls_cola) mls = await resolverMlsOculto({ ...lead, v2 }, v2.score); // leads de MLS sin señal: se muestran si puntúan
   if (body.estado === 'listo') await exportOutputs();
   return { ok: true, v2, ...(mls ? { mls } : {}) };
 }

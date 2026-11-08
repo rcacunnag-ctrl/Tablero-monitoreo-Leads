@@ -6,13 +6,18 @@ importador los une, detecta las señales de negociación y envía las propiedade
 (`C:\monitor\datos\mls`, fuera de OneDrive) y no se comparten. Uso medido: 3 descargas por semana, con pausas normales entre pasos;
 para análisis interno de inversión, respetando las reglas de uso de datos de Beaches MLS.
 
-## Qué llega al tablero
-| Caso | Qué pasa |
+## Qué llega al tablero (cola de 10 por día)
+Para que el ruido sea manejable, **todo lo que se importa entra a una cola oculta**: no se ve en el tablero ni lo toca el Tier 1-V2. Desde el
+**lunes 9-nov** (`MLS_LIBERAR_DESDE`) el servidor suelta **10 por día** (`MLS_LIBERAR_DIA`), primero los que tienen señal de negociación
+(más señales y menor precio primero) y después los demás.
+
+| Al liberarse | Qué pasa |
 |---|---|
-| **Con señal de negociación**: condición especial (*Short Sale*, *REO*, *Probate*, *Foreclosure*, *Auction*), *Listing Terms* de financiamiento o creativo (*Owner Carry*, *Private Financing*, *Assumable*, *Lease Option/Purchase*, *Contract*, *Trust Deed*), o comentarios de vendedor motivado / financiamiento del vendedor | **Entra al tablero** (Nuevo Propiedades y Oportunidades) con la etiqueta 🏷 MLS y sus señales. El Tier 1-V2 corre igual y suma su puntaje |
-| **Sin señal** (solo nueva, rebaja o vuelta al mercado) | Entra **oculta**. Corre el Tier 1-V2: con **60 o más** se muestra; con menos pasa a Descartados (5 días) con el puntaje. Si luego el precio baja **5 % o más**, se evalúa de nuevo |
+| **Con señal de negociación**: condición especial (*Short Sale*, *REO*, *Probate*, *Foreclosure*, *Auction*), *Listing Terms* de financiamiento o creativo (*Owner Carry*, *Private Financing*, *Assumable*, *Lease Option/Purchase*, *Contract*, *Trust Deed*), o comentarios de vendedor motivado / financiamiento del vendedor | **Visible en el tablero** (Nuevo Propiedades y Oportunidades) con la etiqueta 🏷 MLS y sus señales. El Tier 1-V2 la puntúa |
+| **Sin señal** (solo nueva, rebaja o vuelta al mercado) | Sigue **oculta**. El Tier 1-V2 la puntúa: con **60 o más** se muestra; con menos pasa a Descartados (5 días) con el puntaje. Si luego el precio baja **5 % o más**, vuelve a la cola |
 
 No pasan por el Tier 1 automático (no traen ARV): solo el Tier 1-V2 decide. El V2 corre en el PC de Roberto (tope diario `V2_MAX_DIA`).
+La regla de 9 días sin gestión cuenta desde que se libera.
 
 ## Una sola vez: agregar 3 campos al formulario
 Matrix → SEARCH → Residential → *Additional Fields → Add/Remove*: agregar **Major Change Timestamp**, **Listing Terms** y

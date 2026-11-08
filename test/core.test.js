@@ -815,48 +815,63 @@ test('tier 1-V2: cola derivada de los leads, cupo diario, reporte y reintentos',
   await actions.purgarDescartados(Date.now() + 121 * 36e5);
 });
 
-test('MLS: con señal entra visible; sin señal oculto hasta que el Tier 1-V2 dé 60+; si no, Descartados y reentra con rebaja de 5 %', async () => {
-  const { ingresarMls, filaMls } = await import('../src/mls.js');
-  const { reportarV2 } = await import('../src/v2.js');
+test('MLS: todo entra a una cola; se libera de a 10 por día desde la fecha, con señal primero; sin señal exige 60+ del Tier 1-V2', async () => {
+  const { ingresarMls, liberarMls, filaMls } = await import('../src/mls.js');
+  const { reportarV2, listV2Jobs } = await import('../src/v2.js');
   const { config } = await import('../src/config.js');
-  config.v2Enabled = true; config.v2MaxDia = 50; config.mlsScoreMin = 60;
+  config.v2Enabled = true; config.v2Ejecutor = 'Roberto'; config.v2MaxDia = 50; config.mlsScoreMin = 60; config.mlsLiberarDia = 2; config.mlsLiberarDesde = '2026-11-09';
   const fila = (mls_id, dir, extra = {}) => ({ mls_id, direccion: dir, ciudad: 'Tamarac', zip: '33321', condado: 'Broward', precio_usd: 250000, beds: 3, baths: 2, sqft: 1200, dom: 5, fecha_lista: '2026-11-03', fuentes: ['m-movimiento'], senales: [], ...extra });
   const r = await ingresarMls([
-    fila('B26000001', '11 Mls St', { senales: ['Short Sale'], fuentes: ['s-condiciones'] }),
+    fila('B26000001', '11 Mls St', { senales: ['Short Sale'], precio_usd: 240000 }),
     fila('B26000002', '12 Mls St'),
     fila('B26000003', '13 Mls St'),
+    fila('B26000008', '18 Mls St', { senales: ['REO', 'Comentarios: vendedor motivado'], precio_usd: 300000 }),
+    fila('B26000009', '19 Mls St', { senales: ['Auction'], precio_usd: 200000 }),
     fila('B26000004', '14 Mls St', { condado: 'Miami-Dade' }),
     fila('B26000005', 'sin numero', {}),
     fila('X', '15 Mls St'),
   ]);
-  assert.equal(r.nuevos, 3); assert.equal(r.visibles, 1); assert.equal(r.ocultos, 2); assert.equal(r.rechazados.length, 3);
+  assert.equal(r.nuevos, 5); assert.equal(r.en_cola, 5); assert.equal(r.con_senal, 3); assert.equal(r.rechazados.length, 3);
   const get = async (mls) => (await leadsMod.listLeads()).find((l) => l.mls?.id === mls);
-  const [v, o1, o2] = [await get('B26000001'), await get('B26000002'), await get('B26000003')];
-  assert.equal(v.mls_oculto, false); assert.equal(o1.mls_oculto, true);
+  const ids = new Set((await leadsMod.listLeads()).filter((l) => l.origen === 'MLS').map((l) => l.id));
+  const colaV2 = async () => (await listV2Jobs({ ejecutor: 'Roberto' })).filter((j) => ids.has(j.id));
+  const v = await get('B26000001');
   assert.equal(v.origen, 'MLS'); assert.equal(v.estado, ESTADOS.nuevo); assert.equal(v.tipo, 'single_family'); assert.equal(v.mensaje_original, '');
-  // Repetir la exportación no duplica; una señal nueva muestra el oculto
-  const r2 = await ingresarMls([fila('B26000002', '12 Mls St', { senales: ['Listing Terms: financiamiento / creativo'], fuentes: ['t-financiamiento'] })]);
-  assert.equal(r2.actualizados, 1); assert.equal((await get('B26000002')).mls_oculto, false);
+  assert.equal(v.mls_cola, true); assert.equal(v.mls_oculto, true);
+  assert.deepEqual(await colaV2(), []); // en cola: el V2 no los toca
+  // Antes de la fecha no se libera nada
+  assert.deepEqual(await liberarMls(Date.parse('2026-11-08T15:00:00Z')), { liberados: 0, motivo: 'desde 2026-11-09' });
+  // Lunes: 2 por día; primero los de más señales (REO + motivado), luego los de menos precio
+  const lunes = Date.parse('2026-11-09T15:00:00Z');
+  assert.equal((await liberarMls(lunes)).liberados, 2);
+  assert.equal((await liberarMls(lunes + 36e5)).liberados, 0); // el cupo del día ya se usó
+  assert.deepEqual([await get('B26000008'), await get('B26000009'), await get('B26000001'), await get('B26000002')].map((l) => l.mls_cola), [false, false, true, true]);
+  assert.equal((await get('B26000008')).mls_oculto, false); // con señal: visible
+  assert.equal((await colaV2()).length, 2); // y el V2 ya los evalúa
+  assert.equal((await liberarMls(lunes + 864e5)).liberados, 2); // martes: B26000001 (con señal) y luego uno sin señal
+  assert.equal((await get('B26000001')).mls_cola, false);
+  const sinSenal = (await leadsMod.listLeads()).filter((l) => l.mls && !l.mls.senales.length && !l.mls_cola);
+  assert.equal(sinSenal.length, 1); assert.equal(sinSenal[0].mls_oculto, true);
   // Sin señal: el puntaje decide
-  await reportarV2(o2.id, { estado: 'listo', resultado: { veredicto: 'Do not advance', score: 59 } });
-  assert.equal(await get('B26000003'), undefined); // descartado
-  const papelera = (await leadsMod.listPapelera()).find((l) => l.mls?.id === 'B26000003');
+  await reportarV2(sinSenal[0].id, { estado: 'listo', resultado: { veredicto: 'Do not advance', score: 59 } });
+  assert.equal((await leadsMod.listLeads()).some((l) => l.id === sinSenal[0].id), false); // descartado
+  const papelera = (await leadsMod.listPapelera()).find((l) => l.id === sinSenal[0].id);
   assert.match(papelera.descartado_motivo, /MLS: Tier 1-V2 59\/100/);
-  const [o4] = (await ingresarMls([fila('B26000006', '16 Mls St')]), [await get('B26000006')]);
-  await reportarV2(o4.id, { estado: 'listo', resultado: { veredicto: 'Advance with conditions', score: 61 } });
-  assert.equal((await get('B26000006')).mls_oculto, false);
-  assert.equal((await get('B26000006')).mls.visible_por, 'Tier 1-V2 61/100');
-  // El descartado no vuelve igual, pero sí con una rebaja de 5 % o más
-  assert.equal((await ingresarMls([fila('B26000003', '13 Mls St')])).omitidos_descartados, 1);
-  const re = await ingresarMls([fila('B26000003', '13 Mls St', { precio_usd: 237000 })]);
-  assert.equal(re.reentradas, 1); assert.equal((await get('B26000003')).mls_oculto, true);
-  // Ocultos no aparecen en el panel ni en la cola de mercado
+  // El descartado no vuelve igual, pero sí con una rebaja de 5 % o más (a la cola)
+  const d = papelera.mls.id; const dir = papelera.direccion;
+  assert.equal((await ingresarMls([fila(d, dir)])).omitidos_descartados, 1);
+  const re = await ingresarMls([fila(d, dir, { precio_usd: 237000 })]);
+  assert.equal(re.reentradas, 1); assert.equal((await get(d)).mls_cola, true);
+  // Sin señal que sí puntúa 60+: se muestra
+  const [otro] = (await leadsMod.listLeads()).filter((l) => l.mls && !l.mls.senales.length && l.mls_cola && l.mls.id !== d);
+  if (otro) { await leadsMod.updateLead(otro.id, { mls_cola: false, mls_oculto: true }); await reportarV2(otro.id, { estado: 'listo', resultado: { veredicto: 'Advance with conditions', score: 61 } }); assert.equal((await get(otro.mls.id)).mls_oculto, false); assert.equal((await get(otro.mls.id)).mls.visible_por, 'Tier 1-V2 61/100'); }
+  // Ocultos y en cola no aparecen en la cola de mercado
   const m = await import('../src/mercado.js');
-  assert.equal((await m.listMercadoJobs({ ejecutor: config.mercadoEjecutor })).some((j) => j.direccion.startsWith('13 Mls St')), false);
+  assert.equal((await m.listMercadoJobs({ ejecutor: config.mercadoEjecutor })).some((j) => /Mls St/.test(j.direccion)), false);
   assert.equal(filaMls({ mls_id: 'B26000007', direccion: '1 A St', precio_usd: 0, condado: 'Broward' }).rechazo, 'B26000007: sin precio');
   for (const l of (await leadsMod.listLeads()).filter((x) => x.origen === 'MLS')) await actions.descartar(l.id);
   await actions.purgarDescartados(Date.now() + 121 * 36e5);
-  config.v2Enabled = false;
+  config.v2Enabled = false; config.mlsLiberarDesde = '2000-01-01'; config.mlsLiberarDia = 10;
 });
 
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {

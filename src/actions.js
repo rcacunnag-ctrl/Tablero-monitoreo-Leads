@@ -47,7 +47,7 @@ export async function recuperar(id, usuario) {
 }
 
 /** Última gestión del lead: entrada al tablero, recuperación o edición manual (lo más reciente). */
-const ultimaGestion = (l) => Math.max(0, ...[l.procesado_en || l.fecha_mensaje, l.recuperado?.en, ...(l.cambios || []).map((c) => c.en)].map((f) => Date.parse(f) || 0)) || Infinity; // sin ninguna fecha: no se toca
+const ultimaGestion = (l) => Math.max(0, ...[l.procesado_en || l.fecha_mensaje, l.mls?.liberado_en, l.recuperado?.en, ...(l.cambios || []).map((c) => c.en)].map((f) => Date.parse(f) || 0)) || Infinity; // sin ninguna fecha: no se toca
 
 /**
  * Regla de antigüedad: un lead de propiedades que lleva DIAS_SIN_GESTION días (9) sin pasar a Tier 1 ni recibir
@@ -63,7 +63,7 @@ export async function descartarVencidos(ahora = Date.now(), { forzar = false } =
   await fs.writeFile(marca, JSON.stringify({ ultima: ahora }));
   const limite = ahora - config.diasSinGestion * 864e5;
   const sinGestion = [ESTADOS.nuevo, ESTADOS.pendienteDireccion, ESTADOS.revisarCondado, ESTADOS.noCalifica];
-  const vencidos = (await listLeads()).filter((l) => sinGestion.includes(l.estado) && l.tipo !== 'land' && ultimaGestion(l) < limite);
+  const vencidos = (await listLeads()).filter((l) => sinGestion.includes(l.estado) && l.tipo !== 'land' && !l.mls_cola && ultimaGestion(l) < limite); // los de MLS cuentan desde que se liberan
   for (const l of vencidos) await discardLead(l.id, `sin gestión en ${config.diasSinGestion} días`, USUARIO_AUTO);
   if (vencidos.length) await exportOutputs();
   return vencidos.length;

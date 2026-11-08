@@ -71,6 +71,9 @@ export const config = {
   v2Modelo: (process.env.V2_MODELO || 'claude-sonnet-5-5:medium').trim(),
   // Leads de la exportación semanal de MLS (src/mls.js): sin señal de negociación solo llegan al tablero si el Tier 1-V2 da este puntaje o más
   mlsScoreMin: Number(process.env.MLS_SCORE_MIN || 60),
+  // Cola de MLS: cuántos leads se sueltan por día y desde qué día (AAAA-MM-DD, hora de TZ). Antes de esa fecha no se muestra ni se evalúa ninguno.
+  mlsLiberarDia: Number(process.env.MLS_LIBERAR_DIA || 10),
+  mlsLiberarDesde: (process.env.MLS_LIBERAR_DESDE || '2000-01-01').trim(),
   // Criterios de Tier 1 automático: % of ARV = precio / ARV * 100 <= CRIT_PCT_ARV_MAX y precio < CRIT_PRECIO_MAX
   critPctArvMax: Number(process.env.CRIT_PCT_ARV_MAX || 75),
   critPrecioMax: Number(process.env.CRIT_PRECIO_MAX || 300000),

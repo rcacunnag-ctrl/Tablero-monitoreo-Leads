@@ -1,9 +1,11 @@
 // Leads de la exportación semanal de Matrix (Beaches MLS). El importador del PC (mls/mls_importar.py --publicar) los envía aquí
-// ya filtrados y con sus señales. Reglas:
-//  - con señal de negociación (condición especial, Listing Terms de financiamiento, comentarios de vendedor motivado o de
-//    financiamiento): entran visibles al tablero;
-//  - sin señal: entran ocultos (mls_oculto) y solo se muestran si el Tier 1-V2 da MLS_SCORE_MIN (60) o más; si no, pasan a
-//    Descartados (5 días) con el puntaje. Si después el precio baja 5 % o más, vuelven a entrar a evaluarse.
+// ya filtrados y con sus señales. Para no generar más ruido del que se puede manejar, todos entran a una COLA (mls_cola):
+// ocultos y sin que el Tier 1-V2 los toque. Desde MLS_LIBERAR_DESDE se sueltan MLS_LIBERAR_DIA por día (liberarMls), primero los
+// que tienen señal de negociación (condición especial, Listing Terms de financiamiento, comentarios de vendedor motivado o de
+// financiamiento) y después los demás. Al liberarse:
+//  - con señal: quedan visibles en el tablero y el Tier 1-V2 los puntúa;
+//  - sin señal: siguen ocultos (mls_oculto) y solo se muestran si el Tier 1-V2 da MLS_SCORE_MIN (60) o más; si no, pasan a
+//    Descartados (5 días) con el puntaje. Si después el precio baja 5 % o más, vuelven a entrar a la cola.
 // No pasan por los criterios de Tier 1 automático (no traen ARV). El texto de los comentarios se guarda solo para mostrarlo.
 import crypto from 'node:crypto';
 import { config } from './config.js';
@@ -34,7 +36,7 @@ export function filaMls(r) {
   const ahora = new Date().toISOString();
   return {
     lead: {
-      estado: 'Nuevo', alerta: '', origen: 'MLS', mls_oculto: senales.length === 0,
+      estado: 'Nuevo', alerta: '', origen: 'MLS', mls_oculto: true, mls_cola: true,
       mls: { id: mlsId, fuentes: lista(r.fuentes, 40, 6), senales, estado: texto(r.estado, 20), dom: num(r.dom), fecha_lista: texto(r.fecha_lista, 10) || null,
         condiciones: texto(r.condiciones_especiales, 80), folio: texto(r.folio, 30), comentarios: texto(r.comentarios, 600), snapshot: texto(r.snapshot, 10) || null, visto_en: ahora },
       fecha_mensaje: texto(r.fecha_lista, 10) ? `${texto(r.fecha_lista, 10)}T12:00:00.000Z` : ahora, grupo: 'MLS Matrix', autor: 'MLS',
@@ -51,7 +53,7 @@ export function filaMls(r) {
  * Ingresa las filas de una exportación. Devuelve el resumen: nuevos (visibles y ocultos), actualizados, repetidos de lo ya descartado y rechazados.
  */
 export async function ingresarMls(rows) {
-  const out = { nuevos: 0, visibles: 0, ocultos: 0, actualizados: 0, reentradas: 0, omitidos_descartados: 0, rechazados: [] };
+  const out = { nuevos: 0, en_cola: 0, con_senal: 0, actualizados: 0, reentradas: 0, omitidos_descartados: 0, rechazados: [] };
   await withLeads((data) => {
     for (const row of rows) {
       const v = filaMls(row);
@@ -64,7 +66,7 @@ export async function ingresarMls(rows) {
         if (previo.origen === 'MLS') {
           previo.mls = { ...previo.mls, ...nuevo.mls, senales, fuentes: [...new Set([...(previo.mls?.fuentes || []), ...nuevo.mls.fuentes])], ...(rebaja ? { precio_anterior: previo.precio_usd } : {}) };
           previo.resumen = senales.join(' · ') || null;
-          if (previo.mls_oculto && senales.length) previo.mls_oculto = false; // apareció una señal de negociación
+          if (previo.mls_oculto && !previo.mls_cola && senales.length) previo.mls_oculto = false; // ya liberado y apareció una señal de negociación
         }
         if (nuevo.precio_usd !== previo.precio_usd) { previo.precio_repost = nuevo.precio_usd; if (previo.origen === 'MLS') previo.precio_usd = nuevo.precio_usd; }
         previo.actualizado_en = nuevo.mls.visto_en;
@@ -81,15 +83,44 @@ export async function ingresarMls(rows) {
       }
       data.leads.push({ id: crypto.randomUUID(), ...nuevo });
       out.nuevos += 1;
-      out[nuevo.mls_oculto ? 'ocultos' : 'visibles'] += 1;
+      if (nuevo.mls.senales.length) out.con_senal += 1;
+      out.en_cola += 1;
     }
   });
   await exportOutputs();
   return out;
 }
 
+const dia = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: config.timeZone });
+
+/**
+ * Suelta de la cola hasta MLS_LIBERAR_DIA leads por día desde MLS_LIBERAR_DESDE: primero los que tienen señal (más señales y menor
+ * precio primero), luego los demás. Los liberados con señal quedan visibles; los demás esperan el puntaje del Tier 1-V2.
+ */
+export async function liberarMls(ahora = Date.now()) {
+  const hoy = dia(ahora);
+  if (hoy < config.mlsLiberarDesde) return { liberados: 0, motivo: `desde ${config.mlsLiberarDesde}` };
+  const liberados = await withLeads((data) => {
+    const ya = [...data.leads, ...data.papelera].filter((l) => l.mls?.liberado_en && dia(l.mls.liberado_en) === hoy).length;
+    const cupo = Math.max(0, config.mlsLiberarDia - ya);
+    const cola = data.leads.filter((l) => l.mls_cola)
+      .sort((a, b) => (b.mls.senales.length > 0) - (a.mls.senales.length > 0) || b.mls.senales.length - a.mls.senales.length || a.precio_usd - b.precio_usd)
+      .slice(0, cupo);
+    for (const l of cola) {
+      l.mls_cola = false;
+      l.mls_oculto = !l.mls.senales.length;
+      l.mls = { ...l.mls, liberado_en: new Date(ahora).toISOString() };
+      l.actualizado_en = l.mls.liberado_en;
+    }
+    return cola.map((l) => l.id);
+  });
+  if (liberados.length) await exportOutputs();
+  return { liberados: liberados.length };
+}
+
 /** El Tier 1-V2 terminó un lead oculto de MLS: se muestra con MLS_SCORE_MIN o más; si no, a Descartados con el puntaje. */
 export async function resolverMlsOculto(lead, score) {
+  if (lead.mls?.senales?.length) return 'señal'; // con señal de negociación nunca se descarta por puntaje
   const min = config.mlsScoreMin;
   if (Number.isFinite(score) && score >= min) {
     await withLeads((data) => {
