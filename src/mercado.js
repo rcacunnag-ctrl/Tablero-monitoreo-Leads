@@ -15,7 +15,7 @@ export const MAX_INTENTOS = 3;
 export const direccionMercado = (l) => [l.direccion, l.ciudad, ['FL', l.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 
 function pendiente(l) {
-  if (!l.direccion) return false;
+  if (!l.direccion || l.origen === 'MLS') return false; // los de MLS ya vienen del mercado (Active)
   const d = direccionMercado(l);
   if (l.mercado?.direccion === d) return false;
   return !(l.mercado_error?.direccion === d && l.mercado_error.intentos >= MAX_INTENTOS);

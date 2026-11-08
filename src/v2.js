@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { listLeads, updateLead } from './leads.js';
 import { jobLead } from './tier1.js';
 import { exportOutputs } from './sink.js';
+import { resolverMlsOculto } from './mls.js';
 
 const TIPOS_NO = new Set(['land', 'condo', 'townhouse', 'multifamily', 'commercial', 'mobile_home']);
 export const MAX_INTENTOS_V2 = 3;
@@ -66,6 +67,8 @@ export async function reportarV2(id, body = {}) {
     });
   }
   await updateLead(id, { v2 });
+  let mls;
+  if (body.estado === 'listo' && lead.mls_oculto) mls = await resolverMlsOculto({ ...lead, v2 }, v2.score); // leads de MLS sin señal: se muestran si puntúan
   if (body.estado === 'listo') await exportOutputs();
-  return { ok: true, v2 };
+  return { ok: true, v2, ...(mls ? { mls } : {}) };
 }

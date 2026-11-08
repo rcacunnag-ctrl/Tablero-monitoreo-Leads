@@ -87,8 +87,11 @@ const TABS={'Oportunidades':{e:[],o:1},'Nuevo Propiedades':{e:NUEVOS,t:'P'},'Nue
 const PREVIOS=['Nuevo','Revisar condado','No califica'];
 const esTerreno=r=>r.tipo==='land';
 const TIPO_ES={single_family:'Casa',condo:'Condo',townhouse:'Townhouse',multifamily:'Multifamiliar',land:'Terreno',commercial:'Comercial',mobile_home:'Casa móvil',other:'Otro',unknown:'Sin dato'},tipoEs=t=>TIPO_ES[t]||t||'';
-// Oportunidades: leads (en cualquier etapa activa) que el análisis Tier 1-V2 recomienda avanzar, los mejores primero
-const oportunidad=r=>!!r.v2&&r.v2.estado==='listo'&&['Advance to Tier 2','Advance with conditions'].includes(r.v2.veredicto);
+// Oportunidades: leads (en cualquier etapa activa) que el análisis Tier 1-V2 recomienda avanzar, o de MLS con señal de negociación
+// (condición especial, financiamiento del vendedor, vendedor motivado); los de mejor puntaje primero
+const v2Reco=r=>!!r.v2&&r.v2.estado==='listo'&&['Advance to Tier 2','Advance with conditions'].includes(r.v2.veredicto);
+const mlsSenal=r=>r.origen==='MLS'&&!!((r.mls&&r.mls.senales)||[]).length;
+const oportunidad=r=>v2Reco(r)||mlsSenal(r);
 const enTab=(r,t)=>{const x=TABS[t];return x.o?!r._desc&&oportunidad(r):x.d?!!r._desc:!r._desc&&x.e.includes(r.estado)&&(!x.t||(x.t==='T')===esTerreno(r))};
 const RO=!!window.RO,MEDIA=RO?'media/':'/media/';
 const store={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
@@ -109,6 +112,7 @@ const etiqueta=n=>(ETIQ.find(([re])=>re.test(n))||[0,n])[1];
 const archivos=r=>(r.informes||[]).map(i=>'<div><a target="_blank" rel="noopener" href="'+(RO?'':'/')+'informes/'+esc(r.id)+'/'+encodeURIComponent(i.nombre)+'" title="'+esc(i.nombre)+'">📄 T'+i.tier+' · '+esc(etiqueta(i.nombre))+'</a></div>').join('');
 // Lo que pasó con el lead: motivo de No califica, quién lo movió de etapa y la inspección
 function detalle(r){const d=[];
+ if(r.mls)d.push('<span title="'+esc(r.mls.comentarios||'')+'">🏷 MLS '+esc(r.mls.id)+(r.mls.senales&&r.mls.senales.length?' · '+esc(r.mls.senales.join(' · ')):'')+(r.mls.dom!=null?' · '+esc(r.mls.dom)+' d en el mercado':'')+(r.mls.precio_anterior?' · rebaja desde '+money(r.mls.precio_anterior):'')+(r.mls.visible_por?' · visible por '+esc(r.mls.visible_por):'')+(r.mls.reentrada?' · reentrada: '+esc(r.mls.reentrada):'')+'</span>');
  if(r._desc)d.push('Descartado '+fechaCorta(r.descartado_en)+(r.descartado_por?' por '+esc(r.descartado_por):'')+(r.descartado_motivo&&r.descartado_motivo!=='usuario'?' · '+esc(r.descartado_motivo):'')+' · se borra en '+Math.max(0,Math.ceil((new Date(r.descartado_en)-Date.now())/36e5+48))+' h');
  if(r.recuperado)d.push('Recuperado por '+esc(r.recuperado.usuario)+' '+fecha(r.recuperado.en));
  if(r.estado==='No califica'&&r.criterio)d.push('No califica: '+esc(r.criterio));
@@ -123,7 +127,7 @@ function detalle(r){const d=[];
  return d.map(x=>'<div class="m">'+x+'</div>').join('')}
 // Tier 1-V2 (en paralelo al Tier 1): veredicto, puntaje, MAO y ARV del análisis rápido
 function v2(r){const v=r.v2;if(!v)return '';
- if(v.estado==='listo'&&v.veredicto)return '<div class="m pct'+(v.veredicto==='Advance to Tier 2'?' ok':'')+'" title="'+esc(v.detalle||'')+'">'+(Date.now()-Date.parse(v.terminado_en)<48*36e5&&oportunidad(r)?'🆕 ':'')+'Tier 1-V2: '+esc(v.veredicto)+' · '+esc(v.score)+'/100 · MAO '+(v.mao?kUsd(v.mao):'n/a')+' · ARV '+(v.arv?kUsd(v.arv):'n/a')+(v.provisional?' (provisional)':'')+'</div>';
+ if(v.estado==='listo'&&v.veredicto)return '<div class="m pct'+(v.veredicto==='Advance to Tier 2'?' ok':'')+'" title="'+esc(v.detalle||'')+'">'+(Date.now()-Date.parse(v.terminado_en)<48*36e5&&v2Reco(r)?'🆕 ':'')+'Tier 1-V2: '+esc(v.veredicto)+' · '+esc(v.score)+'/100 · MAO '+(v.mao?kUsd(v.mao):'n/a')+' · ARV '+(v.arv?kUsd(v.arv):'n/a')+(v.provisional?' (provisional)':'')+'</div>';
  if(v.estado==='error'&&(v.intentos||0)>=3)return '<div class="m">Tier 1-V2: sin dato</div>';
  return '<div class="m">Tier 1-V2: '+(v.estado==='error'?'reintentando…':'analizando…')+'</div>'}
 // Estado en el mercado (lo consulta el PC con Codex/Haiku al entrar el lead): For sale · $565k · 63 d · Aug 14 · −2 ↓$50k
@@ -176,7 +180,7 @@ function actions(r){if(RO)return '';const b=[],btn=(a,t,c)=>'<button class="'+(c
 function render(){const e=$('estado').value,c=$('condado').value,dup=$('dup').value,q=$('q').value.toLowerCase(),nuevoTab=!!TABS[tab].t;
  $('tabs').innerHTML=Object.keys(TABS).map(t=>'<button class="tab'+(t===tab?' on':'')+'" data-tab="'+t+'">'+t+'<b>'+all.filter(r=>enTab(r,t)).length+'</b></button>').join('');
  const f=all.filter(r=>enTab(r,tab)&&(!e||r.estado===e)&&(!c||r.condado===c)&&(!dup||r.duplicado==='NO')&&(!q||JSON.stringify(r).toLowerCase().includes(q)));
- if(TABS[tab].o)f.sort((a,b)=>b.v2.score-a.v2.score);
+ if(TABS[tab].o)f.sort((a,b)=>((b.v2&&b.v2.score)||0)-((a.v2&&a.v2.score)||0));
  $('rows').innerHTML=f.map(r=>'<tr><td><span class="e '+esc(cls(r.estado))+'">'+esc(r.estado)+'</span>'+informe(r)+archivos(r)+detalle(r)+'</td><td class="m">'+fechaCorta(r.fecha_mensaje)+'</td><td>'+esc(r.condado||'—')+'<div class="m">'+esc(r.metodo_condado||'')+'</div></td><td>'+esc(fullAddr(r))+(fullAddr(r)!=='—'?'<div><button class="lnk" data-map="'+r.id+'">📍 Ver mapa</button></div>'+portales(r):'')+'<div class="m">'+esc(r.estado_direccion)+'</div>'+(r.duplicado&&r.duplicado!=='NO'?'<div class="m">Duplicado</div>':'')+(r.alerta?'<div class="alerta">⚠ '+esc(r.alerta)+(r.contacto||r.telefono?': '+esc(r.contacto||r.autor||'')+' '+(r.telefono?'<a href="tel:'+esc(r.telefono)+'">'+esc(r.telefono)+'</a>':''):'')+'</div>':'')+'</td><td>'+money(r.precio_usd)+(r.arv_usd?'<div class="m">ARV '+money(r.arv_usd)+'</div>':'')+(pct(r)!==null?'<div class="m pct'+(pct(r)<=PCT_MAX?' ok':'')+'">'+pct(r)+'% of ARV</div>':'')+mercado(r)+v2(r)+'</td><td>'+esc([r.beds,r.baths].some(x=>x!=null&&x!=='')?(r.beds??'?')+'/'+(r.baths??'?'):'')+'<div class="m">'+esc(r.sqft?r.sqft+' sqft':'')+'</div></td><td>'+(nuevoTab?esc(tipoEs(r.tipo)):'<span class="clase">'+(esTerreno(r)?'Terreno':'Propiedad')+'</span>'+(r.tipo&&!esTerreno(r)?'<div class="m">'+esc(tipoEs(r.tipo))+'</div>':''))+'<div class="m">'+esc(r.tipo_negocio)+'</div></td><td class="m">'+esc(r.grupo)+'<br>'+esc(r.autor)+'</td><td><details><summary>'+esc(r.resumen)+'</summary><pre>'+esc(r.mensaje_original)+'</pre>'+(r.imagenes_locales||[]).map(p=>'<img src="'+MEDIA+encodeURIComponent(String(p).split(/[\\\\/]/).pop())+'">').join('')+' '+links(r.links_fotos)+' '+links(r.links_portales)+'</details></td>'+(RO?'':'<td>'+actions(r)+'</td>')+'</tr>').join('')||'<tr><td colspan="10" class="m">Sin resultados</td></tr>'}
 async function post(id,a,body){const res=await fetch('/api/leads/'+id+'/'+a,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor':'1'},body:JSON.stringify(body||{})});
  const d=await res.json().catch(()=>({}));if(!res.ok)throw new Error(d.error||'Error '+res.status);return d}

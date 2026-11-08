@@ -1,54 +1,56 @@
-# Exportación semanal de Matrix (Beaches MLS)
+# Matrix (Beaches MLS) → tablero: exportación semanal
 
-Una persona con acceso a Matrix hace **una exportación por semana (lunes)** y deja los archivos en una carpeta. El agente
-trabaja con esos datos durante la semana: no vuelve a entrar al MLS. Los datos se quedan en este PC (`C:\monitor\datos\mls`,
-fuera de OneDrive) y no se publican ni se comparten.
+Una persona con acceso a Matrix baja **3 archivos pequeños una vez por semana** (viernes o lunes, lo importante es que se haga cada semana; lo que cambió
+en los últimos 7 días, no todo el mercado). El
+importador los une, detecta las señales de negociación y envía las propiedades al tablero. Los archivos quedan en este PC
+(`C:\monitor\datos\mls`, fuera de OneDrive) y no se comparten. Uso medido: 3 descargas por semana, con pausas normales entre pasos;
+para análisis interno de inversión, respetando las reglas de uso de datos de Beaches MLS.
 
-**Uso medido:** máximo 3 o 4 exportaciones por semana, con pausas normales entre pasos. No repetir exportaciones iguales.
-Para uso interno de análisis de inversión; respetar las reglas de uso de datos de Beaches MLS.
+## Qué llega al tablero
+| Caso | Qué pasa |
+|---|---|
+| **Con señal de negociación**: condición especial (*Short Sale*, *REO*, *Probate*, *Foreclosure*, *Auction*), *Listing Terms* de financiamiento o creativo (*Owner Carry*, *Private Financing*, *Assumable*, *Lease Option/Purchase*, *Contract*, *Trust Deed*), o comentarios de vendedor motivado / financiamiento del vendedor | **Entra al tablero** (Nuevo Propiedades y Oportunidades) con la etiqueta 🏷 MLS y sus señales. El Tier 1-V2 corre igual y suma su puntaje |
+| **Sin señal** (solo nueva, rebaja o vuelta al mercado) | Entra **oculta**. Corre el Tier 1-V2: con **60 o más** se muestra; con menos pasa a Descartados (5 días) con el puntaje. Si luego el precio baja **5 % o más**, se evalúa de nuevo |
 
-## Antes de empezar (una vez)
-1. La carpeta de trabajo es `C:\monitor\datos\mls` (ya existe en el PC de Roberto; es parte del proyecto del monitor).
-2. Cada lunes, crear una subcarpeta con la fecha: `C:\monitor\datos\mls\2026-11-09`.
+No pasan por el Tier 1 automático (no traen ARV): solo el Tier 1-V2 decide. El V2 corre en el PC de Roberto (tope diario `V2_MAX_DIA`).
 
-## Las exportaciones de cada semana
-Todas se hacen igual: **Matrix → SEARCH → Residential**, se rellenan los criterios de la tabla, se abre **Results**,
-se marcan todos los resultados y se exporta en formato **DataMaster_CSV** (pasos abajo).
+## Una sola vez: agregar 3 campos al formulario
+Matrix → SEARCH → Residential → *Additional Fields → Add/Remove*: agregar **Major Change Timestamp**, **Listing Terms** y
+**Special Listing Conditions**.
 
-| Archivo | Estado (Status) | Fechas | Otros criterios |
-|---|---|---|---|
-| `A-oportunidades.zip` | **Active** y **Coming Soon** (desmarcar el resto) | sin fechas | County: Broward, Palm Beach · Property Subtype: Single Family Residence · List Price (000s): `0-400` |
-| `B-motivados.zip` | **Expired**, **Withdrawn** y **Canceled** | en cada casilla de fecha, los últimos 60 días: `mm/dd/aaaa-mm/dd/aaaa` | igual que A |
-| `C-cerradas.zip` | **Closed** | los últimos 14 días: `mm/dd/aaaa-mm/dd/aaaa` | County: Broward, Palm Beach · Single Family Residence · List Price (000s): `0-600` |
-| `D-comparables-<zip>.zip` | **Closed** | desde el 01/06/2026 hasta hoy | Zip Code: los códigos que indique el sistema (ver abajo) · Single Family Residence |
+## Las 3 búsquedas de cada semana
+Criterios comunes: **Status** Active (y Coming Soon) · **County** Broward y Palm Beach · **Property Subtype** Single Family Residence ·
+**Major Change Timestamp** = últimos 7 días en formato `mm/dd/aaaa-mm/dd/aaaa`.
 
-- **D no es semanal.** Se hace la primera vez y luego solo para códigos postales nuevos. Después de importar A, el
-  sistema imprime «códigos postales sin historial de ventas»: se exporta una D con esos códigos separados por coma.
-- Si Matrix no deja escribir `0-400` en precio, escribir `400` en el máximo; el rango es en miles (la casilla «000s» marcada).
+| Archivo | Criterio propio | Casos medidos (7 días, 7-nov) |
+|---|---|---|
+| `M-movimiento.zip` | List Price (000s): `0-300` | 27 |
+| `S-condiciones.zip` | List Price `0-400` · **Special Listing Conditions**: *Short Sale*, *Probate Listing*, *In Foreclosure*, *Real Estate Owned*, *Auction* | 18 |
+| `T-financiamiento.zip` | List Price `0-400` · **Listing Terms**: *Owner May Carry*, *Owner Will Carry*, *Private Financing Available*, *Assumable*, *Lease Option*, *Lease Purchase*, *Contract*, *Trust Deed* | 1 (la primera carga, sin fechas, fueron 25) |
+
+Los campos de Matrix se combinan con **Y**, no con **O**: por eso son 3 búsquedas. El conteo «matches» de abajo parpadea mientras carga; leerlo cuando se estabiliza.
 
 ## Cómo exportar (por cada archivo)
-1. **SEARCH → Residential.** Si hay criterios de una búsqueda anterior, usar **Clear** (abajo a la izquierda).
-2. En **Status – Date or Range**: marcar solo los estados de la tabla. Donde la tabla pide fechas, escribirlas en la casilla del estado.
-3. **Property Subtype**: seleccionar *Single Family Residence*. **County** (o **Zip Code**): escribir los valores separados por coma.
-4. **List Price (000s)**: el rango de la tabla.
-5. Abajo a la izquierda, pulsar **Results**. Revisar el número de resultados (A: cientos; C: decenas a pocos cientos).
-6. Marcar **todo**: en la barra de arriba de la lista, junto a «Checked», pulsar **All** (marca los resultados de todas las páginas).
-7. Abajo, en la barra *Actions*, pulsar **Export**.
-8. **Export file format**: elegir **DataMaster_CSV** (el único que trae superficie, comentarios, folio y foto). Pulsar **Export**.
-9. El navegador baja `DataMaster_CSV.zip`. Si Edge pregunta si se conserva, elegir **Mantener / Keep**.
-10. Mover el archivo a `C:\monitor\datos\mls\<fecha>\` y renombrarlo según la tabla (`A-oportunidades.zip`, etc.).
+1. **Clear** (abajo a la izquierda) y rellenar los criterios de la tabla.
+2. Pulsar **Results**; arriba, junto a «Checked», pulsar **All**.
+3. Barra *Actions* → **Export** → *Export file format* **DataMaster_CSV** → **Export**.
+4. Edge pregunta si se conserva el archivo: **Mantener**. Queda como `DataMaster_CSV.zip` en Descargas.
+5. Moverlo a `C:\monitor\datos\mls\<fecha de la descarga>\` (p. ej. `2026-11-14`) y renombrarlo `M-movimiento.zip`, `S-condiciones.zip` o `T-financiamiento.zip`.
+   La letra inicial indica qué búsqueda es: de ahí sale la señal de *Listing Terms*.
 
-No abrir los .zip ni descomprimirlos a mano: el importador los lee tal cual.
+## Importar y enviar
+Doble clic en `C:\monitor\datos\mls\IMPORTAR.cmd`: usa la carpeta con la fecha más reciente, muestra cuántas propiedades hay, cuántas con señal y
+cuántas esperan el V2, y pregunta si las envía al tablero. Importar el mismo archivo dos veces no duplica nada; una propiedad que viene en
+varios archivos cuenta una vez.
 
-## Importar
-Doble clic en `C:\monitor\datos\mls\IMPORTAR.cmd` (usa la carpeta con la fecha más reciente). Imprime cuántos registros cargó por
-archivo, los códigos postales sin historial de ventas y las propiedades nuevas de la semana. Importar el mismo archivo dos
-veces no duplica nada.
+## Cuántos casos por semana (medido 7-nov, Broward + Palm Beach, unifamiliar)
+- **Con señal de negociación: unos 19** (18 condiciones especiales ≤ $400K, 1 de Listing Terms, más los pocos con frases en los comentarios).
+- **Sin señal: unos 20** (nuevas, rebajas y vueltas al mercado ≤ $300K); entran al tablero solo las que el V2 puntúe en 60 o más.
+- Stock que hoy ya está en el mercado y no se baja cada semana: 68 con condición especial ≤ $400K y 25 con Listing Terms ≤ $400K.
 
-## Qué trae el formato DataMaster_CSV (probado el 2026-11-04 con 141 ventas cerradas del 33406)
-64 columnas: dirección, ciudad, código postal, condado, **folio** (cruza con el catastro), habitaciones, baños,
-**superficie**, lote, año, precio de lista y de cierre, fechas de lista, cierre, pendiente, retiro y vencimiento, **DOM**,
-**comentarios públicos** (dicen si es remodelada, «Investor Special», «requires updating»), techo, ventanas, interior,
-condiciones especiales (*Short Sale*, *REO*…), impuesto anual, cuota HOA y **una foto** por propiedad.
-No trae: historial de rebajas (se detecta comparando las exportaciones de semanas distintas), comentarios privados de agentes,
-latitud ni longitud (se obtienen del folio o de la dirección).
+## Lo que trae el DataMaster_CSV
+Dirección, ciudad, zip, condado, **folio**, habitaciones, baños, superficie, lote, año, precios de lista y cierre, fechas, **DOM**, **comentarios
+públicos**, *Special Listing Conditions*, impuesto, HOA y una foto. **No trae** *Listing Terms* (por eso el archivo T), historial de rebajas
+(se detecta al repetir semanas), comentarios privados ni datos del agente (por ahora no se necesitan: solo la dirección y los datos de la propiedad).
+Otros tipos de vivienda: el Tier 1-V2 hoy no analiza condominios, townhouses ni multifamiliares; con los mismos filtros, sumar townhouse y villa
+da 97 casos por semana (≤ $300K) y con condominios 958.

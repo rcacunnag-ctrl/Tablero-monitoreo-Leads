@@ -4,6 +4,11 @@
 Uso:
     python mls_importar.py "C:\\monitor\\datos\\mls\\2026-11-09"   # todos los .zip/.csv de la carpeta
     python mls_importar.py archivo.zip --etiqueta oportunidades      # una exportación
+    python mls_importar.py "C:\\monitor\\datos\\mls\\2026-11-09" --publicar   # además envía las propiedades al tablero
+    python mls_importar.py "C:\\monitor\\datos\\mls\\2026-11-09" --publicar --solo-ver   # muestra qué enviaría, sin enviar
+
+Archivos semanales (la letra inicial del nombre dice qué búsqueda es): M-movimiento (nuevas, rebajas y vueltas al mercado de 7 días),
+S-condiciones (Short Sale, REO, Probate, Foreclosure, Auction), T-financiamiento (Listing Terms: Owner Carry, Assumable, Lease Option...).
 
 - Acepta el .zip que baja Matrix (un CSV + una foto por propiedad) o el CSV suelto.
 - Guarda en <proyecto>\\datos\\mls\\mls.db (tabla `listado`: una fila por propiedad y semana, para ver cambios de precio entre
@@ -11,6 +16,7 @@ Uso:
 - Cada importación queda en `importaciones` (archivo, etiqueta, filas, fecha). Importar dos veces el mismo archivo no duplica.
 """
 import argparse
+import json
 import csv
 import datetime as dt
 import hashlib
@@ -19,6 +25,7 @@ import os
 import re
 import sqlite3
 import sys
+import urllib.request
 import zipfile
 
 RAIZ = os.environ.get("MLS_SEMANAL", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datos", "mls"))
@@ -62,6 +69,7 @@ def abrir_db():
     con.execute(f"CREATE TABLE IF NOT EXISTS listado ({', '.join(f'{c} {t}' for c, t in COLS)}, PRIMARY KEY (mls_id, snapshot))")
     con.execute("CREATE INDEX IF NOT EXISTS ix_listado_zip ON listado (zip, estado)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_listado_folio ON listado (folio)")
+    con.execute("CREATE TABLE IF NOT EXISTS fuentes (mls_id TEXT, snapshot TEXT, etiqueta TEXT, PRIMARY KEY (mls_id, snapshot, etiqueta))")
     con.execute("CREATE TABLE IF NOT EXISTS importaciones (sha1 TEXT PRIMARY KEY, archivo TEXT, etiqueta TEXT, snapshot TEXT, filas INTEGER, importado_en TEXT)")
     return con
 
@@ -115,6 +123,7 @@ def importar(ruta, etiqueta="", snapshot=None, con=None):
         reg["zip"] = (reg["zip"] or "")[:5]
         reg["snapshot"], reg["etiqueta"], reg["foto"] = snap, etiqueta, fotos.get(reg["mls_id"])
         con.execute(f"INSERT OR REPLACE INTO listado ({', '.join(reg)}) VALUES ({', '.join('?' * len(reg))})", list(reg.values()))
+        con.execute("INSERT OR IGNORE INTO fuentes VALUES (?,?,?)", (reg["mls_id"], snap, etiqueta))  # una propiedad puede venir en varios archivos
         n += 1
     con.execute("INSERT INTO importaciones VALUES (?,?,?,?,?,?)", (sha, os.path.basename(ruta), etiqueta, snap, n, dt.datetime.now().isoformat(timespec="seconds")))
     con.commit()
@@ -126,6 +135,9 @@ def main():
     ap.add_argument("ruta", help="carpeta con las exportaciones o un archivo .zip/.csv")
     ap.add_argument("--etiqueta", default="", help="oportunidades | motivados | cerradas | comparables (por defecto, el nombre del archivo)")
     ap.add_argument("--snapshot", help="fecha de la exportación AAAA-MM-DD (por defecto, la del archivo)")
+    ap.add_argument("--publicar", action="store_true", help="envía al tablero las propiedades activas de la última exportación (con sus señales)")
+    ap.add_argument("--solo-ver", action="store_true", help="con --publicar: muestra el resumen sin enviar")
+    ap.add_argument("--api", default=os.environ.get("MLS_API", "http://100.97.63.81:3000"), help="panel del monitor (por Tailscale)")
     a = ap.parse_args()
     archivos = [os.path.join(a.ruta, f) for f in sorted(os.listdir(a.ruta)) if f.lower().endswith((".zip", ".csv"))] if os.path.isdir(a.ruta) else [a.ruta]
     con = abrir_db()
@@ -134,6 +146,9 @@ def main():
         print(importar(f, et, a.snapshot, con))
     print("total en la base:", con.execute("SELECT COUNT(*) FROM listado").fetchone()[0])
     resumen(con)
+    if a.publicar:
+        snap = a.snapshot or max((r[0] for r in con.execute("SELECT snapshot FROM importaciones")), default=None)
+        publicar(con, snap, a.api, a.solo_ver)
 
 
 def resumen(con):
@@ -150,6 +165,64 @@ def resumen(con):
         GROUP BY a.zip HAVING (SELECT COUNT(*) FROM listado c WHERE c.zip=a.zip AND c.estado='Closed' AND c.fecha_cierre>=date('now','-180 day'))<10 ORDER BY COUNT(*) DESC""", (ult,))]
     if sin:
         print("Códigos postales sin historial de ventas (exportar D con estos):", ", ".join(sin))
+
+
+CONDICIONES = {"Short Sale": "Short Sale", "Real Estate Owned": "REO", "Probate Listing": "Probate", "In Foreclosure": "Foreclosure", "Auction": "Auction"}
+# Comentarios públicos: vendedor motivado o financiamiento del vendedor. Solo estas frases (otras como «investor» o «as is» traen demasiado ruido).
+RE_MOTIVADO = re.compile(r"motivated|must sell|priced to sell|bring (?:all |any |your )?offers|all offers|quick sale|urgent sale|relocating", re.I)
+RE_FINANCIA = re.compile(r"seller financ|owner financ|owner will carry|seller will carry|creative financ|assumable|assume (?:the )?(?:loan|mortgage)|subject[- ]to (?:the )?(?:existing|current|seller'?s?) (?:mortgage|loan)|lease[- ]option|rent[- ]to[- ]own|wrap(?:around)? mortgage", re.I)
+
+
+def senales(fila, fuentes):
+    """Qué indica que se puede negociar: condiciones especiales, Listing Terms (archivo T) y frases de los comentarios."""
+    out = []
+    for c in [x.strip() for x in (fila["condiciones_especiales"] or "").split(",")]:
+        if c in CONDICIONES:
+            out.append(CONDICIONES[c])
+    if any(f == "t" or f.startswith("t-") for f in fuentes):
+        out.append("Listing Terms: financiamiento / creativo")
+    com = fila["comentarios"] or ""
+    if RE_MOTIVADO.search(com):
+        out.append("Comentarios: vendedor motivado")
+    if RE_FINANCIA.search(com):
+        out.append("Comentarios: financiamiento del vendedor")
+    return list(dict.fromkeys(out))
+
+
+def candidatos(con, snap):
+    """Propiedades activas de la importación `snap` (una por MLS#) con sus fuentes y señales."""
+    con.row_factory = sqlite3.Row
+    filas = con.execute("SELECT * FROM listado WHERE snapshot=? AND estado IN ('Active','Coming Soon')", (snap,)).fetchall()
+    out = []
+    for f in filas:
+        fuentes = [r[0] for r in con.execute("SELECT etiqueta FROM fuentes WHERE mls_id=? AND snapshot=?", (f["mls_id"], snap))]
+        out.append({"mls_id": f["mls_id"], "estado": f["estado"], "direccion": f["direccion"], "ciudad": f["ciudad"], "zip": f["zip"], "condado": f["condado"],
+                    "folio": f["folio"], "precio_usd": f["precio_lista"], "beds": f["beds"], "baths": f["baths"], "sqft": f["sqft"], "lote_sqft": f["lote_sqft"],
+                    "anio": f["anio"], "dom": f["dom"], "fecha_lista": f["fecha_lista"], "condiciones_especiales": f["condiciones_especiales"],
+                    "comentarios": f["comentarios"], "snapshot": snap, "fuentes": fuentes, "senales": senales(f, fuentes)})
+    con.row_factory = None
+    return out
+
+
+def publicar(con, snap, api, solo_ver=False):
+    """Envía los candidatos al tablero. Con señal de negociación entran visibles; sin señal esperan el puntaje del Tier 1-V2 (>= 60)."""
+    cand = candidatos(con, snap)
+    con_senal = [c for c in cand if c["senales"]]
+    print(f"\nPara el tablero ({snap}): {len(cand)} propiedades; {len(con_senal)} con señal de negociación (visibles) y {len(cand) - len(con_senal)} sin señal (esperan Tier 1-V2 >= 60)")
+    cuenta = {}
+    for c in con_senal:
+        for s_ in c["senales"]:
+            cuenta[s_] = cuenta.get(s_, 0) + 1
+    for k, v in sorted(cuenta.items(), key=lambda kv: -kv[1]):
+        print(f"  {v:3d}  {k}")
+    if solo_ver:
+        for c in con_senal:
+            print(f"  {c['mls_id']}  ${c['precio_usd']:,.0f}  {c['direccion']}, {c['ciudad']}  <- {'; '.join(c['senales'])}")
+        return
+    req = urllib.request.Request(api.rstrip("/") + "/api/mls-leads", data=json.dumps({"leads": cand}).encode("utf-8"),
+                                 headers={"Content-Type": "application/json", "X-Monitor": "1"}, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        print("Panel:", r.read().decode("utf-8"))
 
 
 if __name__ == "__main__":

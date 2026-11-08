@@ -7,7 +7,8 @@ import os from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { exportXlsx, exportOutputs } from './sink.js';
-import { listLeads, listPapelera } from './leads.js';
+import { listLeads, listPapelera, esVisible } from './leads.js';
+import { ingresarMls } from './mls.js';
 import { descartar, recuperar, editarLead, TIPOS, pasarATier1, agregarDireccion, agregarPrecio, reportarInforme, registrarInspeccion, avanzar, pasarATier2, reportarTier2, reintentarTier2Lead } from './actions.js';
 import { listTier2Jobs } from './tier2.js';
 import { listMercadoJobs, reportarMercado } from './mercado.js';
@@ -47,6 +48,11 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
         if (job) return send(res, 200, 'application/json', JSON.stringify(await reportarInforme(job[1], await readJson(req))));
         const job3 = url.pathname.match(/^\/api\/mercado-jobs\/([\w-]+)\/estado$/);
         if (job3) return send(res, 200, 'application/json', JSON.stringify(await reportarMercado(job3[1], await readJson(req))));
+        if (url.pathname === '/api/mls-leads') {
+          const body = await readJson(req, 400_000);
+          if (!Array.isArray(body.leads) || body.leads.length > 300) throw Object.assign(new Error('Se espera { leads: [...] } con hasta 300 filas'), { status: 400 });
+          return send(res, 200, 'application/json', JSON.stringify(await ingresarMls(body.leads)));
+        }
         const jobV2 = url.pathname.match(/^\/api\/v2-jobs\/([\w-]+)\/estado$/);
         if (jobV2) return send(res, 200, 'application/json', JSON.stringify(await reportarV2(jobV2[1], await readJson(req))));
         const job2 = url.pathname.match(/^\/api\/tier2-jobs\/([\w-]+)\/estado$/);
@@ -58,7 +64,7 @@ export function startDashboard({ port = config.dashboardPort, host = config.dash
       }
       if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', PAGE);
       if (url.pathname === '/api/leads') {
-        const body = { leads: await listLeads(), descartados: await listPapelera(), tipos: TIPOS, condados: config.targetCounties, usuarios: config.tier1Users, ejecutores: config.ejecutores, ejecutoresT2: config.tier2Ejecutores, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
+        const body = { leads: (await listLeads()).filter(esVisible), descartados: await listPapelera(), tipos: TIPOS, condados: config.targetCounties, usuarios: config.tier1Users, ejecutores: config.ejecutores, ejecutoresT2: config.tier2Ejecutores, skillHabilitado: config.tier1SkillEnabled, disco: await usoDisco() };
         return send(res, 200, 'application/json', JSON.stringify(body));
       }
       if (url.pathname === '/api/tier1-jobs') {
@@ -124,11 +130,11 @@ function checkSameOrigin(req, tipo = /^application\/json/) {
   }
 }
 
-async function readJson(req) {
+async function readJson(req, max = 10_000) {
   let raw = '';
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 10_000) throw Object.assign(new Error('Cuerpo demasiado grande'), { status: 413 });
+    if (raw.length > max) throw Object.assign(new Error('Cuerpo demasiado grande'), { status: 413 });
   }
   try {
     return raw ? JSON.parse(raw) : {};

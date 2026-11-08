@@ -815,6 +815,50 @@ test('tier 1-V2: cola derivada de los leads, cupo diario, reporte y reintentos',
   await actions.purgarDescartados(Date.now() + 121 * 36e5);
 });
 
+test('MLS: con señal entra visible; sin señal oculto hasta que el Tier 1-V2 dé 60+; si no, Descartados y reentra con rebaja de 5 %', async () => {
+  const { ingresarMls, filaMls } = await import('../src/mls.js');
+  const { reportarV2 } = await import('../src/v2.js');
+  const { config } = await import('../src/config.js');
+  config.v2Enabled = true; config.v2MaxDia = 50; config.mlsScoreMin = 60;
+  const fila = (mls_id, dir, extra = {}) => ({ mls_id, direccion: dir, ciudad: 'Tamarac', zip: '33321', condado: 'Broward', precio_usd: 250000, beds: 3, baths: 2, sqft: 1200, dom: 5, fecha_lista: '2026-11-03', fuentes: ['m-movimiento'], senales: [], ...extra });
+  const r = await ingresarMls([
+    fila('B26000001', '11 Mls St', { senales: ['Short Sale'], fuentes: ['s-condiciones'] }),
+    fila('B26000002', '12 Mls St'),
+    fila('B26000003', '13 Mls St'),
+    fila('B26000004', '14 Mls St', { condado: 'Miami-Dade' }),
+    fila('B26000005', 'sin numero', {}),
+    fila('X', '15 Mls St'),
+  ]);
+  assert.equal(r.nuevos, 3); assert.equal(r.visibles, 1); assert.equal(r.ocultos, 2); assert.equal(r.rechazados.length, 3);
+  const get = async (mls) => (await leadsMod.listLeads()).find((l) => l.mls?.id === mls);
+  const [v, o1, o2] = [await get('B26000001'), await get('B26000002'), await get('B26000003')];
+  assert.equal(v.mls_oculto, false); assert.equal(o1.mls_oculto, true);
+  assert.equal(v.origen, 'MLS'); assert.equal(v.estado, ESTADOS.nuevo); assert.equal(v.tipo, 'single_family'); assert.equal(v.mensaje_original, '');
+  // Repetir la exportación no duplica; una señal nueva muestra el oculto
+  const r2 = await ingresarMls([fila('B26000002', '12 Mls St', { senales: ['Listing Terms: financiamiento / creativo'], fuentes: ['t-financiamiento'] })]);
+  assert.equal(r2.actualizados, 1); assert.equal((await get('B26000002')).mls_oculto, false);
+  // Sin señal: el puntaje decide
+  await reportarV2(o2.id, { estado: 'listo', resultado: { veredicto: 'Do not advance', score: 59 } });
+  assert.equal(await get('B26000003'), undefined); // descartado
+  const papelera = (await leadsMod.listPapelera()).find((l) => l.mls?.id === 'B26000003');
+  assert.match(papelera.descartado_motivo, /MLS: Tier 1-V2 59\/100/);
+  const [o4] = (await ingresarMls([fila('B26000006', '16 Mls St')]), [await get('B26000006')]);
+  await reportarV2(o4.id, { estado: 'listo', resultado: { veredicto: 'Advance with conditions', score: 61 } });
+  assert.equal((await get('B26000006')).mls_oculto, false);
+  assert.equal((await get('B26000006')).mls.visible_por, 'Tier 1-V2 61/100');
+  // El descartado no vuelve igual, pero sí con una rebaja de 5 % o más
+  assert.equal((await ingresarMls([fila('B26000003', '13 Mls St')])).omitidos_descartados, 1);
+  const re = await ingresarMls([fila('B26000003', '13 Mls St', { precio_usd: 237000 })]);
+  assert.equal(re.reentradas, 1); assert.equal((await get('B26000003')).mls_oculto, true);
+  // Ocultos no aparecen en el panel ni en la cola de mercado
+  const m = await import('../src/mercado.js');
+  assert.equal((await m.listMercadoJobs({ ejecutor: config.mercadoEjecutor })).some((j) => j.direccion.startsWith('13 Mls St')), false);
+  assert.equal(filaMls({ mls_id: 'B26000007', direccion: '1 A St', precio_usd: 0, condado: 'Broward' }).rechazo, 'B26000007: sin precio');
+  for (const l of (await leadsMod.listLeads()).filter((x) => x.origen === 'MLS')) await actions.descartar(l.id);
+  await actions.purgarDescartados(Date.now() + 121 * 36e5);
+  config.v2Enabled = false;
+});
+
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {
   const { config } = await import('../src/config.js');
   const m = await import('../src/mercado.js');

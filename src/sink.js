@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { config } from './config.js';
-import { listLeads } from './leads.js';
+import { listLeads, esVisible } from './leads.js';
 import { writeVista } from './vista.js';
 
 export const COLUMNS = [
@@ -41,7 +41,7 @@ export async function exportOutputs() {
 }
 
 async function exportCsvXlsx() {
-  const rows = (await listLeads()).map(fila);
+  const rows = (await listLeads()).filter(esVisible).map(fila);
   await fs.mkdir(path.dirname(config.csvFile), { recursive: true });
   const lines = [csvLine(COLUMNS), ...rows.map((r) => csvLine(COLUMNS.map((c) => toCell(r[c]))))];
   // BOM para que Excel muestre bien acentos y ñ
@@ -51,7 +51,7 @@ async function exportCsvXlsx() {
 
 /** Regenera propiedades.xlsx con los leads activos (filtros, encabezado fijo, estado resaltado). */
 export async function exportXlsx(file = config.xlsxFile) {
-  const rows = (await listLeads()).map(fila);
+  const rows = (await listLeads()).filter(esVisible).map(fila);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Propiedades', { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.columns = COLUMNS.map((c) => ({ header: c, key: c, width: WIDTHS[c] || 14 }));

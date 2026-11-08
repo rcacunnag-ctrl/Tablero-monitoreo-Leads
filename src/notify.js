@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
-import { listLeads } from './leads.js';
+import { listLeads, esVisible } from './leads.js';
 
 const SECCIONES = [
   ['alerta', '⚠️ Pedir datos al wholesaler'],
@@ -116,7 +116,7 @@ export function revisarEnvio({ ahora = new Date(), enviar = enviarFn } = {}) {
     const turno = turnoVigente(ahora);
     if (!turno) return { enviado: false, motivo: 'fuera de horario' };
     if (c.ultimo_turno === turno) return { enviado: false, motivo: 'turno ya enviado' };
-    const texto = armarResumen(c.pendientes, await listLeads(), ahora);
+    const texto = armarResumen(c.pendientes, (await listLeads()).filter(esVisible), ahora);
     if (texto) await enviar(texto);
     const n = c.pendientes.length;
     c.pendientes = [];

@@ -54,6 +54,9 @@ export async function listLeads() {
   return (await loadLeads()).leads;
 }
 
+/** Los leads de MLS esperan ocultos (mls_oculto) hasta que el Tier 1-V2 los puntúe; el tablero y los avisos solo muestran los visibles. */
+export const esVisible = (l) => !l.mls_oculto;
+
 const HORAS_CORRECCION = 48;
 const unidad = (d) => (/(?:#|\bUnit\b|\bApt\b|\bSuite\b|\bSte\b)\s*#?\s*([\w-]+)/i.exec(d || '') || [])[1]?.toUpperCase() || '';
 const calleSinNumero = (d) => String(d || '').replace(/\s*,?\s*(?:#|\bUnit\b|\bApt\b|\bSuite\b|\bSte\b).*$/i, '')
