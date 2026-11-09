@@ -4,7 +4,8 @@
 // (el que tiene el rol estatal de Florida indexado) recibe la cola; ahí corre el skill tier1-v2-propiedades con `claude -p`
 // y reporta aquí. El resultado queda en `lead.v2` y el HTML en `lead.informes` (nombre *-tier1-v2.html).
 import { config } from './config.js';
-import { listLeads, updateLead } from './leads.js';
+import { listLeads, updateLead, esOportunidad } from './leads.js';
+import { encolarOportunidad } from './notify.js';
 import { jobLead } from './tier1.js';
 import { exportOutputs } from './sink.js';
 import { resolverMlsOculto } from './mls.js';
@@ -69,6 +70,10 @@ export async function reportarV2(id, body = {}) {
   await updateLead(id, { v2 });
   let mls;
   if (body.estado === 'listo' && lead.mls_oculto && !lead.mls_cola) mls = await resolverMlsOculto({ ...lead, v2 }, v2.score); // leads de MLS sin señal: se muestran si puntúan
-  if (body.estado === 'listo') await exportOutputs();
+  if (body.estado === 'listo') {
+    const actual = (await listLeads()).find((l) => l.id === id);
+    if (actual && esOportunidad(actual) && !actual.oport_avisada) await encolarOportunidad(id); // aviso al grupo de oportunidades
+    await exportOutputs();
+  }
   return { ok: true, v2, ...(mls ? { mls } : {}) };
 }

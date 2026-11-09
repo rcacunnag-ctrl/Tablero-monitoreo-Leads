@@ -87,10 +87,10 @@ const TABS={'Oportunidades':{e:[],o:1},'Nuevo Propiedades':{e:NUEVOS,t:'P'},'Nue
 const PREVIOS=['Nuevo','Revisar condado','No califica'];
 const esTerreno=r=>r.tipo==='land';
 const TIPO_ES={single_family:'Casa',condo:'Condo',townhouse:'Townhouse',multifamily:'Multifamiliar',land:'Terreno',commercial:'Comercial',mobile_home:'Casa móvil',other:'Otro',unknown:'Sin dato'},tipoEs=t=>TIPO_ES[t]||t||'';
-// Oportunidades: leads (en cualquier etapa activa) que el análisis Tier 1-V2 recomienda avanzar, o de MLS con señal de negociación
-// (condición especial, financiamiento del vendedor, vendedor motivado); los de mejor puntaje primero
+// Oportunidades: leads (en cualquier etapa activa) que el Tier 1-V2 recomienda avanzar, o de MLS con señal de negociación
+// (condición especial, financiamiento del vendedor, vendedor motivado) o con V2 suficiente para mostrarse; los de mejor puntaje primero
 const v2Reco=r=>!!r.v2&&r.v2.estado==='listo'&&['Advance to Tier 2','Advance with conditions'].includes(r.v2.veredicto);
-const mlsSenal=r=>r.origen==='MLS'&&!!((r.mls&&r.mls.senales)||[]).length;
+const mlsSenal=r=>r.origen==='MLS'&&!!(((r.mls&&r.mls.senales)||[]).length||(r.mls&&r.mls.visible_por));
 const oportunidad=r=>v2Reco(r)||mlsSenal(r);
 const enTab=(r,t)=>{const x=TABS[t];return x.o?!r._desc&&oportunidad(r):x.d?!!r._desc:!r._desc&&x.e.includes(r.estado)&&(!x.t||(x.t==='T')===esTerreno(r))};
 const RO=!!window.RO,MEDIA=RO?'media/':'/media/';

@@ -13,7 +13,7 @@ Para que el ruido sea manejable, **todo lo que se importa entra a una cola ocult
 
 | Al liberarse | Qué pasa |
 |---|---|
-| **Con señal de negociación**: condición especial (*Short Sale*, *REO*, *Probate*, *Foreclosure*, *Auction*), *Listing Terms* de financiamiento o creativo (*Owner Carry*, *Private Financing*, *Assumable*, *Lease Option/Purchase*, *Contract*, *Trust Deed*), o comentarios de vendedor motivado / financiamiento del vendedor | **Visible en el tablero** (Nuevo Propiedades y Oportunidades) con la etiqueta 🏷 MLS y sus señales. El Tier 1-V2 la puntúa |
+| **Con señal de negociación**: condición especial (*Short Sale*, *REO*, *Probate*, *Foreclosure*, *Auction*), *Listing Terms* de financiamiento o creativo (*Owner Carry*, *Private Financing*, *Assumable*, *Lease Option/Purchase*, *Contract*, *Trust Deed*), o comentarios de vendedor motivado / financiamiento del vendedor | **Visible en el tablero** (Nuevo Propiedades y **Oportunidades**) con la etiqueta 🏷 MLS y sus señales. El Tier 1-V2 la puntúa y suma su puntaje |
 | **Sin señal** (solo nueva, rebaja o vuelta al mercado) | Sigue **oculta**. El Tier 1-V2 la puntúa: con **60 o más** se muestra; con menos pasa a Descartados (5 días) con el puntaje. Si luego el precio baja **5 % o más**, vuelve a la cola |
 
 No pasan por el Tier 1 automático (no traen ARV): solo el Tier 1-V2 decide. El V2 corre en el PC de Roberto (tope diario `V2_MAX_DIA`).

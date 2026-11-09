@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
-import { listLeads, esVisible } from './leads.js';
+import { listLeads, esVisible, esOportunidad, withLeads } from './leads.js';
 
 const SECCIONES = [
   ['alerta', '⚠️ Pedir datos al wholesaler'],
@@ -20,6 +20,7 @@ const MAX_POR_SECCION = 10;
 let cola;
 let lock = Promise.resolve();
 let enviarFn = null;
+let enviarOportFn = null;
 
 function serial(fn) {
   const run = lock.then(fn);
@@ -35,6 +36,7 @@ async function cargar() {
     cola = {};
   }
   cola.pendientes ||= [];
+  cola.oport ||= [];
   cola.ultimo_envio ||= null;
   return cola;
 }
@@ -46,8 +48,9 @@ async function guardar() {
 }
 
 /** Registra la conexión de WhatsApp vigente (cambia en cada reconexión). */
-export function conectarNotificaciones(sock, jid) {
+export function conectarNotificaciones(sock, jid, jidOport) {
   enviarFn = jid ? (text) => sock.sendMessage(jid, { text }) : null;
+  enviarOportFn = jidOport ? (text) => sock.sendMessage(jidOport, { text }) : null;
 }
 
 /** Agrega una novedad a la cola. tipo: alerta | informe_t1 | informe_t1_error | informe_t2 | informe_t2_error */
@@ -127,11 +130,71 @@ export function revisarEnvio({ ahora = new Date(), enviar = enviarFn } = {}) {
   });
 }
 
+// --- Oportunidades: grupo aparte (NOTIF_OPORT_GRUPO) que recibe solo esto ---
+
+/** Marca un lead como oportunidad nueva por avisar (una sola vez por lead). */
+export function encolarOportunidad(id) {
+  if (!config.notifOportGrupo) return Promise.resolve();
+  return serial(async () => {
+    const c = await cargar();
+    if (c.oport.some((e) => e.id === id)) return;
+    c.oport.push({ id, en: new Date().toISOString() });
+    await guardar();
+  });
+}
+
+const VEREDICTO = { 'Advance to Tier 2': 'avanzar a Tier 2', 'Advance with conditions': 'avanzar con condiciones', 'Do not advance': 'no avanzar' };
+
+function datosOport(l) {
+  const dato = [l.precio_usd && corto(l.precio_usd), (l.beds || l.baths) && `${l.beds ?? '?'}/${l.baths ?? '?'}`, l.sqft && `${Number(l.sqft).toLocaleString('en-US')} sqft`].filter(Boolean).join(' · ');
+  const v2 = l.v2?.estado === 'listo' && Number.isFinite(l.v2.score)
+    ? `Tier 1-V2 ${l.v2.score}/100 (${VEREDICTO[l.v2.veredicto] || l.v2.veredicto})${l.v2.mao ? ` · MAO ${corto(l.v2.mao)}` : ''}${l.v2.arv ? ` · ARV ${corto(l.v2.arv)}` : ''}` : '';
+  const mls = l.mls ? [...(l.mls.senales || []), l.mls.dom != null && `${l.mls.dom} d en el mercado`, l.mls.precio_anterior && `rebaja desde ${corto(l.mls.precio_anterior)}`].filter(Boolean).join(' · ') : '';
+  return { titulo: direccion(l), dato, detalle: [v2, mls].filter(Boolean).join(' — ') };
+}
+
+/** Texto del aviso de oportunidades: una descrita; hasta NOTIF_OPORT_MAX en lista breve; más de eso, solo el aviso de ir al portal. */
+export function armarAvisoOport(leads) {
+  const n = leads.length;
+  if (!n) return '';
+  const portal = config.notifPortalUrl;
+  if (n > config.notifOportMax) return [`*${n} oportunidades nuevas* en el tablero.`, `Revísalas en el portal (pestaña Oportunidades): ${portal}`].join('\n');
+  if (n === 1) {
+    const d = datosOport(leads[0]);
+    return [`*Nueva oportunidad*`, d.titulo, d.dato, d.detalle, `Portal: ${portal}`].filter(Boolean).join('\n');
+  }
+  const lineas = leads.map((l) => { const d = datosOport(l); return [`• ${d.titulo}${d.dato ? ` — ${d.dato}` : ''}`, d.detalle && `   ${d.detalle}`].filter(Boolean).join('\n'); });
+  return [`*${n} oportunidades nuevas*`, ...lineas, `Portal: ${portal}`].join('\n');
+}
+
+/** Envía las oportunidades nuevas al grupo si toca (mismos horarios), solo las que siguen vigentes y no se han avisado. */
+export function revisarEnvioOport({ ahora = new Date(), enviar = enviarOportFn } = {}) {
+  return serial(async () => {
+    if (!config.notifOportGrupo) return { enviado: false, motivo: 'desactivado' };
+    const c = await cargar();
+    if (!c.oport.length) return { enviado: false, motivo: 'sin novedades' };
+    if (!enviar) return { enviado: false, motivo: 'sin conexión' };
+    const turno = turnoVigente(ahora);
+    if (!turno) return { enviado: false, motivo: 'fuera de horario' };
+    if (c.ultimo_turno_oport === turno) return { enviado: false, motivo: 'turno ya enviado' };
+    const ids = new Set(c.oport.map((e) => e.id));
+    const leads = (await listLeads()).filter((l) => ids.has(l.id) && esOportunidad(l) && !l.oport_avisada);
+    const texto = armarAvisoOport(leads);
+    if (texto) await enviar(texto);
+    if (texto) await withLeads((data) => { for (const l of data.leads) if (leads.some((x) => x.id === l.id)) l.oport_avisada = ahora.toISOString(); });
+    c.oport = [];
+    c.ultimo_turno_oport = turno;
+    await guardar();
+    return { enviado: Boolean(texto), oportunidades: leads.length };
+  });
+}
+
 /** Revisa cada 5 minutos si toca enviar. */
 export function iniciarNotificaciones(log = console) {
-  if (!config.notifEnabled) return null;
+  if (!config.notifEnabled && !config.notifOportGrupo) return null;
   return setInterval(() => {
     revisarEnvio().then((r) => r.enviado && log.log(`Resumen enviado al grupo (${r.eventos} novedades)`)).catch((e) => log.error(`Avisos: ${e.message}`));
+    revisarEnvioOport().then((r) => r.enviado && log.log(`Oportunidades avisadas al grupo (${r.oportunidades})`)).catch((e) => log.error(`Avisos de oportunidades: ${e.message}`));
   }, 5 * 60000);
 }
 
@@ -139,4 +202,5 @@ export function iniciarNotificaciones(log = console) {
 export function _resetNotify() {
   cola = undefined;
   enviarFn = null;
+  enviarOportFn = null;
 }

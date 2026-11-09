@@ -87,9 +87,11 @@ await connect({
     }
     selected = sel;
     markReady();
-    if (config.notifEnabled && !listOnly) {
+    if ((config.notifEnabled || config.notifOportGrupo) && !listOnly) {
       const g = all.find((x) => x.name.toLowerCase() === config.notifGrupo.toLowerCase()) || all.find((x) => x.name.toLowerCase().includes(config.notifGrupo.toLowerCase()));
-      conectarNotificaciones(sock, g?.jid);
+      const buscar = (n) => all.find((x) => x.name.toLowerCase() === n.toLowerCase()) || all.find((x) => x.name.toLowerCase().includes(n.toLowerCase()));
+      conectarNotificaciones(sock, g?.jid, config.notifOportGrupo ? buscar(config.notifOportGrupo)?.jid : null);
+      if (config.notifOportGrupo) console.log(buscar(config.notifOportGrupo) ? `Avisos de oportunidades a "${buscar(config.notifOportGrupo).name}" (mismos horarios)` : `Avisos de oportunidades: no se encontró el grupo "${config.notifOportGrupo}"`);
       console.log(g ? `Avisos: resumen a las ${config.notifHorarios.join(' y ')} (${config.notifTz}) a "${g.name}"` : `Avisos: no se encontró el grupo "${config.notifGrupo}"`);
     }
     console.log(`Monitoreando ${selected.size} grupo(s): ${[...selected.values()].join(' | ')}`);

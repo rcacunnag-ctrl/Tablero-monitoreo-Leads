@@ -57,6 +57,14 @@ export async function listLeads() {
 /** Los leads de MLS esperan ocultos (mls_oculto) hasta que el Tier 1-V2 los puntúe; el tablero y los avisos solo muestran los visibles. */
 export const esVisible = (l) => !l.mls_oculto;
 
+/**
+ * Oportunidad (pestaña Oportunidades y avisos de WhatsApp): el Tier 1-V2 recomienda avanzar (con o sin condiciones), o es de MLS
+ * ya liberada con una señal de negociación (condición especial, financiamiento del vendedor, vendedor motivado) o con V2 suficiente para mostrarse.
+ */
+export const esOportunidad = (l) => esVisible(l) && !l.mls_cola && (
+  (l.v2?.estado === 'listo' && ['Advance to Tier 2', 'Advance with conditions'].includes(l.v2.veredicto))
+  || (l.origen === 'MLS' && Boolean((l.mls?.senales || []).length || l.mls?.visible_por)));
+
 const HORAS_CORRECCION = 48;
 const unidad = (d) => (/(?:#|\bUnit\b|\bApt\b|\bSuite\b|\bSte\b)\s*#?\s*([\w-]+)/i.exec(d || '') || [])[1]?.toUpperCase() || '';
 const calleSinNumero = (d) => String(d || '').replace(/\s*,?\s*(?:#|\bUnit\b|\bApt\b|\bSuite\b|\bSte\b).*$/i, '')

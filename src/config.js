@@ -105,6 +105,11 @@ export const config = {
   notifGrupo: (process.env.NOTIF_GRUPO || 'Grupo prueba Wholesaler').trim(),
   notifHorarios: list(process.env.NOTIF_HORARIOS || '11:00,17:30').filter((h) => /^\d{1,2}:\d{2}$/.test(h)),
   notifTz: process.env.NOTIF_TZ || 'America/Bogota',
+  // Grupo que recibe SOLO las oportunidades nuevas (vacío = sin avisos de oportunidades). Hasta NOTIF_OPORT_MAX se describen una por una;
+  // con más, un solo mensaje que manda al portal (NOTIF_PORTAL_URL). Mismos horarios que el resto de avisos.
+  notifOportGrupo: (process.env.NOTIF_OPORT_GRUPO || '').trim(),
+  notifOportMax: Number(process.env.NOTIF_OPORT_MAX || 5),
+  notifPortalUrl: (process.env.NOTIF_PORTAL_URL || 'http://100.97.63.81:3000').trim(),
 
   dirs: {
     inbox: path.join(DATA_DIR, 'inbox'),

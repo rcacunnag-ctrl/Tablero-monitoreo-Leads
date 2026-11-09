@@ -874,6 +874,69 @@ test('MLS: todo entra a una cola; se libera de a 10 por día desde la fecha, con
   config.v2Enabled = false; config.mlsLiberarDesde = '2000-01-01'; config.mlsLiberarDia = 10;
 });
 
+test('avisos de oportunidades: grupo aparte, V2 que recomienda o MLS con señal; una descrita, hasta 5 en lista, más de 5 al portal, sin repetir', async () => {
+  const { config } = await import('../src/config.js');
+  const notify = await import('../src/notify.js');
+  const { esOportunidad } = await import('../src/leads.js');
+  const { reportarV2 } = await import('../src/v2.js');
+  notify._resetNotify();
+  const antes = [config.notifOportGrupo, config.notifPortalUrl, config.notifEnabled];
+  config.notifOportGrupo = 'Profitiq - Temas de Interés'; config.notifPortalUrl = 'http://portal.test:3000'; config.notifEnabled = false;
+  try {
+    const mk = (i, extra = {}) => ({ estado: ESTADOS.nuevo, direccion: `${i} Oport St`, ciudad: 'Tamarac', condado: 'Broward', precio_usd: 250000, beds: 3, baths: 2, sqft: 1300, tipo: 'single_family', ...extra });
+    const v2ok = { estado: 'listo', veredicto: 'Advance with conditions', score: 72, mao: 231000, arv: 345000 };
+    const [a, b, c, d, e, f, g, h] = await leadsMod.addLeads([
+      mk(1, { v2: v2ok }),
+      mk(2, { v2: { ...v2ok, veredicto: 'Do not advance', score: 30 } }), // no la recomienda
+      mk(3, { origen: 'MLS', mls: { id: 'B1', senales: ['Short Sale'], dom: 12 } }), // MLS con señal de negociación: es oportunidad
+      mk(4, { origen: 'MLS', v2: v2ok, mls: { id: 'B2', senales: ['Short Sale'], dom: 12 } }),
+      mk(5, { origen: 'MLS', v2: v2ok, mls_cola: true, mls_oculto: true, mls: { id: 'B3', senales: ['REO'] } }), // en cola: no
+      mk(6, { v2: v2ok }), mk(7, { v2: v2ok }), mk(8, { v2: v2ok }),
+    ]);
+    assert.deepEqual([a, b, c, d, e].map(esOportunidad), [true, false, true, true, false]);
+    const enviados = [];
+    const enviar = async (t) => enviados.push(t);
+    const hora = (iso) => ({ ahora: new Date(iso), enviar });
+    // Una sola: se describe brevemente
+    await notify.encolarOportunidad(a.id);
+    assert.equal((await notify.revisarEnvioOport(hora('2026-11-10T15:00:00Z'))).motivo, 'fuera de horario'); // 10:00 Colombia
+    const r1 = await notify.revisarEnvioOport(hora('2026-11-10T16:05:00Z'));
+    assert.equal(r1.enviado, true); assert.equal(enviados.length, 1);
+    assert.equal(enviados[0], ['*Nueva oportunidad*', '1 Oport St, Tamarac', '$250k · 3/2 · 1,300 sqft', 'Tier 1-V2 72/100 (avanzar con condiciones) · MAO $231k · ARV $345k', 'Portal: http://portal.test:3000'].join('\n'));
+    // Ya avisada: no se repite aunque se vuelva a encolar
+    await notify.encolarOportunidad(a.id);
+    assert.equal((await notify.revisarEnvioOport(hora('2026-11-10T22:35:00Z'))).enviado, false);
+    // Cuatro encoladas, tres vigentes: lista breve (las de MLS llevan sus señales; la que no tiene V2 aún, solo eso)
+    for (const l of [b, c, d, f]) await notify.encolarOportunidad(l.id);
+    const r2 = await notify.revisarEnvioOport(hora('2026-11-11T16:05:00Z'));
+    assert.equal(r2.oportunidades, 3);
+    assert.equal(enviados[1], ['*3 oportunidades nuevas*', '• 3 Oport St, Tamarac — $250k · 3/2 · 1,300 sqft', '   Short Sale · 12 d en el mercado',
+      '• 4 Oport St, Tamarac — $250k · 3/2 · 1,300 sqft', '   Tier 1-V2 72/100 (avanzar con condiciones) · MAO $231k · ARV $345k — Short Sale · 12 d en el mercado',
+      '• 6 Oport St, Tamarac — $250k · 3/2 · 1,300 sqft', '   Tier 1-V2 72/100 (avanzar con condiciones) · MAO $231k · ARV $345k', 'Portal: http://portal.test:3000'].join('\n'));
+    // Más de 5: solo el aviso de ir al portal
+    await leadsMod.updateLead(e.id, { mls_cola: false, mls_oculto: false });
+    for (const l of [a, d, e, f, g, h]) { await leadsMod.updateLead(l.id, { oport_avisada: null }); await notify.encolarOportunidad(l.id); }
+    const r3 = await notify.revisarEnvioOport(hora('2026-11-12T16:05:00Z'));
+    assert.equal(r3.oportunidades, 6);
+    assert.equal(enviados[2], ['*6 oportunidades nuevas* en el tablero.', 'Revísalas en el portal (pestaña Oportunidades): http://portal.test:3000'].join('\n'));
+    // El V2 al terminar encola solo si recomienda avanzar
+    config.v2Enabled = true;
+    const [n1, n2] = await leadsMod.addLeads([mk(9), mk(10)]);
+    await reportarV2(n1.id, { estado: 'listo', resultado: { veredicto: 'Advance to Tier 2', score: 80 } });
+    await reportarV2(n2.id, { estado: 'listo', resultado: { veredicto: 'Do not advance', score: 20 } });
+    const r4 = await notify.revisarEnvioOport(hora('2026-11-13T16:05:00Z'));
+    assert.equal(r4.oportunidades, 1); assert.ok(enviados[3].startsWith('*Nueva oportunidad*\n9 Oport St'));
+    // Sin grupo configurado: no envía; el resumen del otro grupo no lleva oportunidades
+    config.notifOportGrupo = '';
+    assert.equal((await notify.revisarEnvioOport(hora('2026-11-14T16:05:00Z'))).motivo, 'desactivado');
+    assert.equal(notify.armarResumen([{ tipo: 'oportunidad', id: a.id }], await leadsMod.listLeads()), '');
+  } finally {
+    [config.notifOportGrupo, config.notifPortalUrl, config.notifEnabled] = antes;
+    config.v2Enabled = false;
+    notify._resetNotify();
+  }
+});
+
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {
   const { config } = await import('../src/config.js');
   const m = await import('../src/mercado.js');

@@ -9,7 +9,8 @@
 // No pasan por los criterios de Tier 1 automático (no traen ARV). El texto de los comentarios se guarda solo para mostrarlo.
 import crypto from 'node:crypto';
 import { config } from './config.js';
-import { withLeads, discardLead } from './leads.js';
+import { withLeads, discardLead, esOportunidad, listLeads } from './leads.js';
+import { encolarOportunidad } from './notify.js';
 import { addressKey } from './store.js';
 import { inTargetCounty } from './pipeline.js';
 import { exportOutputs } from './sink.js';
@@ -114,7 +115,10 @@ export async function liberarMls(ahora = Date.now()) {
     }
     return cola.map((l) => l.id);
   });
-  if (liberados.length) await exportOutputs();
+  if (liberados.length) {
+    for (const l of (await listLeads()).filter((x) => liberados.includes(x.id) && esOportunidad(x))) await encolarOportunidad(l.id); // los liberados con señal
+    await exportOutputs();
+  }
   return { liberados: liberados.length };
 }
 

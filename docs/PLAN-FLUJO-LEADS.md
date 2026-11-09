@@ -216,4 +216,10 @@ Fuente semanal además de WhatsApp y correo (`src/mls.js`, `mls/mls_importar.py 
 - Todo entra a una **cola oculta** (`mls_cola`, sin Tier 1-V2). Desde `MLS_LIBERAR_DESDE` se sueltan `MLS_LIBERAR_DIA` (10) por día, primero los que tienen señal (`liberarMls`, cada hora).
 - **Con señal de negociación** (condición especial, Listing Terms de financiamiento, comentarios de vendedor motivado o de financiamiento): al liberarse quedan visibles y el V2 los puntúa.
 - **Sin señal**: al liberarse siguen ocultas (`mls_oculto`) hasta que el Tier 1-V2 dé `MLS_SCORE_MIN` (60) o más; con menos pasa a Descartados con el puntaje. Reentra a la cola si el precio baja 5 % o más.
-- No pasa por el Tier 1 automático ni por la consulta de mercado; el panel, el Excel y los avisos solo muestran los visibles. La pestaña Oportunidades suma los de MLS con señal.
+- No pasa por el Tier 1 automático ni por la consulta de mercado; el panel, el Excel y los avisos solo muestran los visibles. La pestaña Oportunidades muestra lo que el Tier 1-V2 recomienda avanzar y los de MLS con señal de negociación.
+
+## Avisos de oportunidades por WhatsApp — 2026-11-09
+Grupo aparte (`NOTIF_OPORT_GRUPO`, p. ej. «Profitiq - Temas de Interés») que recibe **solo oportunidades nuevas**; no lleva alertas ni informes (eso sigue en `NOTIF_GRUPO`).
+- Oportunidad (pestaña y avisos, `esOportunidad` en `src/leads.js`) = el Tier 1-V2 recomienda avanzar (con o sin condiciones), o es de MLS ya liberada con señal de negociación (o V2 suficiente para mostrarse).
+- Se encola al terminar el V2 (`reportarV2`) o al liberarse de la cola de MLS (`liberarMls`), una sola vez por lead (`oport_avisada`).
+- Mismos horarios que el resto (11:00 y 17:30 Colombia, con la hora de gracia). Una oportunidad: se describe (dirección, precio, camas/baños, puntaje V2, MAO/ARV o señales de MLS). De 2 a `NOTIF_OPORT_MAX` (5): lista breve. Más de 5: un solo mensaje que manda al portal (`NOTIF_PORTAL_URL`, por Tailscale).
