@@ -57,6 +57,10 @@ export async function listLeads() {
 /** Los leads de MLS esperan ocultos (mls_oculto) hasta que el Tier 1-V2 los puntúe; el tablero y los avisos solo muestran los visibles. */
 export const esVisible = (l) => !l.mls_oculto;
 
+/** Texto de la columna Mensaje: el del anuncio; en los de MLS con Listing Terms de financiamiento / creativo, los Public Remarks del MLS. */
+export const mensajeLead = (l) => l.mensaje_original
+  || (l.origen === 'MLS' && (l.mls?.senales || []).some((s) => s.startsWith('Listing Terms')) ? l.mls.comentarios || '' : '');
+
 /**
  * Oportunidad (pestaña Oportunidades y avisos de WhatsApp): el Tier 1-V2 recomienda avanzar (con o sin condiciones), o es de MLS
  * ya liberada con una señal de negociación (condición especial, financiamiento del vendedor, vendedor motivado) o con V2 suficiente para mostrarse.

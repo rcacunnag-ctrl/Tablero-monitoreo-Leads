@@ -223,3 +223,6 @@ Grupo aparte (`NOTIF_OPORT_GRUPO`, p. ej. «Profitiq - Temas de Interés») que 
 - Oportunidad (pestaña y avisos, `esOportunidad` en `src/leads.js`) = el Tier 1-V2 recomienda avanzar (con o sin condiciones), o es de MLS ya liberada con señal de negociación (o V2 suficiente para mostrarse).
 - Se encola al terminar el V2 (`reportarV2`) o al liberarse de la cola de MLS (`liberarMls`), una sola vez por lead (`oport_avisada`).
 - Mismos horarios que el resto (11:00 y 17:30 Colombia, con la hora de gracia). Una oportunidad: se describe (dirección, precio, camas/baños, puntaje V2, MAO/ARV o señales de MLS). De 2 a `NOTIF_OPORT_MAX` (5): lista breve. Más de 5: un solo mensaje que manda al portal (`NOTIF_PORTAL_URL`, por Tailscale).
+
+## Condado por ZIP solo — 2026-11-12
+Orden para determinar el condado (`resolveCounty`, `src/geo.js`): tablas locales (ZIP, luego ciudad) → Census Geocoder por dirección → **último recurso: el ZIP solo** (`censusZipCounty`: centro del ZIP en TIGERweb y condado de ese punto). Así un ZIP de otro condado (p. ej. 33705 → Pinellas) se descarta como «fuera de condado» en vez de quedar en «Revisar condado». Requiere `USE_CENSUS_GEOCODER=true`; si el Census falla o no conoce el ZIP, sigue yendo a «Revisar condado».

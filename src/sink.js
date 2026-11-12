@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { config } from './config.js';
-import { listLeads, esVisible } from './leads.js';
+import { listLeads, esVisible, mensajeLead } from './leads.js';
 import { writeVista } from './vista.js';
 
 export const COLUMNS = [
@@ -17,7 +17,7 @@ export const COLUMNS = [
 ];
 
 /** Campos del estado en el mercado (objeto `mercado`) como columnas planas. */
-const fila = (r) => ({ ...r, mercado_estado: r.mercado?.estado, mercado_precio: r.mercado?.precio_lista, mercado_publicado: r.mercado?.fecha_publicacion,
+const fila = (r) => ({ ...r, mensaje_original: mensajeLead(r), mercado_estado: r.mercado?.estado, mercado_precio: r.mercado?.precio_lista, mercado_publicado: r.mercado?.fecha_publicacion,
   mercado_dias: r.mercado?.dias_en_mercado, mercado_reducciones: r.mercado?.reducciones?.length,
   v2_veredicto: r.v2?.veredicto, v2_score: r.v2?.score, v2_mao: r.v2?.mao, v2_arv: r.v2?.arv });
 const toCell = (v) => (v === null || v === undefined ? '' : Array.isArray(v) ? v.join('\n') : v);

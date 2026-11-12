@@ -39,7 +39,7 @@ export function filaMls(r) {
     lead: {
       estado: 'Nuevo', alerta: '', origen: 'MLS', mls_oculto: true, mls_cola: true,
       mls: { id: mlsId, fuentes: lista(r.fuentes, 40, 6), senales, estado: texto(r.estado, 20), dom: num(r.dom), fecha_lista: texto(r.fecha_lista, 10) || null,
-        condiciones: texto(r.condiciones_especiales, 80), folio: texto(r.folio, 30), comentarios: texto(r.comentarios, 600), snapshot: texto(r.snapshot, 10) || null, visto_en: ahora },
+        condiciones: texto(r.condiciones_especiales, 80), folio: texto(r.folio, 30), comentarios: texto(r.comentarios, 2500), snapshot: texto(r.snapshot, 10) || null, visto_en: ahora },
       fecha_mensaje: texto(r.fecha_lista, 10) ? `${texto(r.fecha_lista, 10)}T12:00:00.000Z` : ahora, grupo: 'MLS Matrix', autor: 'MLS',
       condado, metodo_condado: 'mls', estado_direccion: 'COMPLETA', direccion, ciudad, zip: zip || null,
       precio_usd: precio, arv_usd: null, beds: num(r.beds), baths: num(r.baths), sqft: num(r.sqft), lote_sqft: num(r.lote_sqft), anio: num(r.anio),

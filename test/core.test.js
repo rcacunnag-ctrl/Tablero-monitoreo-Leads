@@ -57,6 +57,28 @@ test('condado offline: ZIP primero, luego ciudad; Census solo si se habilita', a
   assert.equal(r3.county, 'Palm Beach'); // si el Census falla, se queda con la tabla
 });
 
+test('condado por ZIP solo (último recurso): ZIP fuera de las tablas se resuelve con el Census; si falla, queda sin condado', async () => {
+  const llamadas = [];
+  const fakeFetch = async (url) => {
+    llamadas.push(String(url));
+    const u = String(url);
+    if (u.includes('tigerweb')) return { ok: true, json: async () => ({ features: u.includes('33705') ? [{ attributes: { ZCTA5: '33705', INTPTLAT: '+27.7395978', INTPTLON: '-082.6398275' } }] : [] }) };
+    return { ok: true, json: async () => ({ result: { geographies: { Counties: [{ NAME: 'Pinellas County' }] } } }) };
+  };
+  // Dirección que el Census no encuentra y ciudad/ZIP que no están en las tablas: el ZIP lo resuelve
+  const r1 = await resolveCounty({ street_address: '7 10th St S', city: 'St. Petersburg', zip: '33705' }, { useCensus: true, fetchImpl: async (u) => (String(u).includes('onelineaddress') ? { ok: true, json: async () => ({ result: { addressMatches: [] } }) } : fakeFetch(u)) });
+  assert.equal(r1.county, 'Pinellas'); assert.equal(r1.method, 'zip_census'); assert.equal(r1.ambiguous, false);
+  assert.equal(classify({ street_address: '7 10th St S', arv_usd: null }, r1).descartar, 'fuera de condado (Pinellas)');
+  // Con las tablas locales no se llama a internet
+  const noNet = async () => { throw new Error('no debería llamar a internet'); };
+  assert.equal((await resolveCounty({ street_address: '1 A St', city: 'Davie', zip: '33314' }, { useCensus: true, fetchImpl: noNet })).method, 'zip_table');
+  // ZIP desconocido para el Census o red caída: sin condado (queda "Revisar condado")
+  assert.equal((await resolveCounty({ street_address: '1 A St', zip: '99999' }, { useCensus: true, fetchImpl: fakeFetch })).county, null);
+  assert.equal((await resolveCounty({ street_address: '1 A St', zip: '33706' }, { useCensus: true, fetchImpl: async () => { throw new Error('network'); } })).county, null);
+  // Sin USE_CENSUS_GEOCODER no consulta
+  assert.equal((await resolveCounty({ street_address: '1 A St', zip: '33705' }, { useCensus: false, fetchImpl: noNet })).county, null);
+});
+
 test('dinero', () => {
   assert.equal(parseMoney('325', 'k'), 325000);
   assert.equal(parseMoney('1.2', 'M'), 1200000);
@@ -782,6 +804,7 @@ test('tier 1-V2: cola derivada de los leads, cupo diario, reporte y reintentos',
   const mios = new Set([a, b, c, terreno, sinPrecio, otroCondado].map((l) => l.id));
   const cola = async () => (await listV2Jobs({ ejecutor: 'Roberto' })).filter((j) => mios.has(j.id)).map((j) => j.id); // otras pruebas dejan leads con dirección
   assert.deepEqual([a, terreno, sinPrecio, otroCondado].map(elegibleV2), [true, false, false, false]);
+  assert.equal(elegibleV2({ ...otroCondado, excepcion: { motivo: 'condado fuera de alcance, agregado a mano' } }), true); // excepción manual
   assert.deepEqual(await listV2Jobs({ ejecutor: 'Andres' }), []); // solo el PC de V2_EJECUTOR
   const jobs = await listV2Jobs({ ejecutor: 'Roberto' });
   assert.deepEqual(jobs.map((j) => j.id), [c.id, b.id]); // más nuevos primero, con cupo de 2 al día
@@ -935,6 +958,17 @@ test('avisos de oportunidades: grupo aparte, V2 que recomienda o MLS con señal;
     config.v2Enabled = false;
     notify._resetNotify();
   }
+});
+
+test('columna Mensaje: los de MLS con Listing Terms de financiamiento llevan los Public Remarks', async () => {
+  const { mensajeLead, mensajeLead: m } = await import('../src/leads.js');
+  const fin = { origen: 'MLS', mensaje_original: '', mls: { senales: ['Listing Terms: financiamiento / creativo'], comentarios: 'Owner will carry 10% down.' } };
+  assert.equal(m(fin), 'Owner will carry 10% down.');
+  assert.equal(m({ ...fin, mls: { ...fin.mls, senales: ['Short Sale'] } }), ''); // otras señales: no
+  assert.equal(m({ origen: 'WhatsApp', mensaje_original: 'texto del wholesaler' }), 'texto del wholesaler');
+  assert.equal(mensajeLead({ origen: 'MLS', mls: { senales: [], comentarios: 'x' } }), '');
+  const { COLUMNS } = await import('../src/sink.js');
+  assert.ok(COLUMNS.includes('mensaje_original'));
 });
 
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {

@@ -21,7 +21,8 @@ const ESTADOS = ['pendiente', 'en_proceso', 'listo', 'error']; // pendiente: el 
 export const firmaV2 = (l) => `${[l.direccion, l.ciudad, l.zip].filter(Boolean).join(',')}|${l.precio_usd}`.toLowerCase();
 const dia = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: config.timeZone });
 
-export const elegibleV2 = (l) => Boolean(l.direccion && Number(l.precio_usd) > 0 && !TIPOS_NO.has(l.tipo) && config.targetCounties.includes(l.condado));
+// `excepcion`: lead de un condado fuera de TARGET_COUNTIES que el usuario agregó a mano (se analiza igual)
+export const elegibleV2 = (l) => Boolean(l.direccion && Number(l.precio_usd) > 0 && !TIPOS_NO.has(l.tipo) && (config.targetCounties.includes(l.condado) || l.excepcion));
 
 function pendienteV2(l, ahora) {
   if (!elegibleV2(l) || l.mls_cola) return false; // los de MLS en cola esperan su turno (src/mls.js)

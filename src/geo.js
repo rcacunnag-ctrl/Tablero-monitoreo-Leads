@@ -31,6 +31,32 @@ export function parseCensusResponse(json) {
   };
 }
 
+const TIGERWEB_ZCTA = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/PUMA_TAD_TAZ_UGA_ZCTA/MapServer/1/query';
+const CENSUS_COORDS = 'https://geocoding.geo.census.gov/geocoder/geographies/coordinates';
+const zipCache = new Map();
+
+/**
+ * Condado de un código postal (solo el ZIP, sin calle): ubica el centro del ZIP (Census TIGERweb) y consulta el condado de ese punto
+ * (Census Geocoder). Sirve para ZIP fuera de las tablas locales (p. ej. 33705 -> Pinellas). Devuelve null si no lo resuelve.
+ */
+export async function censusZipCounty(zip, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
+  const z = String(zip || '').trim().slice(0, 5);
+  if (!/^\d{5}$/.test(z)) return null;
+  if (zipCache.has(z)) return zipCache.get(z);
+  const getJson = async (url) => {
+    const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) throw new Error(`Census HTTP ${res.status}`);
+    return res.json();
+  };
+  const zcta = await getJson(`${TIGERWEB_ZCTA}?${new URLSearchParams({ where: `ZCTA5='${z}'`, outFields: 'ZCTA5,INTPTLAT,INTPTLON', returnGeometry: 'false', f: 'json' })}`);
+  const a = zcta?.features?.[0]?.attributes;
+  if (!a) { zipCache.set(z, null); return null; }
+  const geo = await getJson(`${CENSUS_COORDS}?${new URLSearchParams({ x: String(Number(a.INTPTLON)), y: String(Number(a.INTPTLAT)), benchmark: 'Public_AR_Current', vintage: 'Current_Current', layers: 'Counties', format: 'json' })}`);
+  const county = cleanCountyName(geo?.result?.geographies?.Counties?.[0]?.NAME);
+  zipCache.set(z, county);
+  return county;
+}
+
 /**
  * Determina el condado sin servicios externos: ZIP -> condado, luego ciudad -> condado.
  * Opcional (USE_CENSUS_GEOCODER=true): consulta el Census Geocoder (gratuito, sin API key)
@@ -55,6 +81,15 @@ export async function resolveCounty(listing, { useCensus = config.useCensusGeoco
       if (geo?.county) return { ...out, ...geo, method: 'census_geocoder' };
     } catch (err) {
       out.error = err.message;
+    }
+  }
+  // Último recurso: si ni la dirección ni las tablas lo resolvieron, el ZIP solo basta para saber el condado
+  if (useCensus && !local?.county && /^\d{5}/.test(String(listing.zip || '').trim())) {
+    try {
+      const county = await censusZipCounty(listing.zip, opts);
+      if (county) return { ...out, county, zip: String(listing.zip).trim().slice(0, 5), method: 'zip_census' };
+    } catch (err) {
+      out.error = out.error || err.message;
     }
   }
   return local || out;
