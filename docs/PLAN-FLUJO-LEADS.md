@@ -226,3 +226,6 @@ Grupo aparte (`NOTIF_OPORT_GRUPO`, p. ej. «Profitiq - Temas de Interés») que 
 
 ## Condado por ZIP solo — 2026-11-12
 Orden para determinar el condado (`resolveCounty`, `src/geo.js`): tablas locales (ZIP, luego ciudad) → Census Geocoder por dirección → **último recurso: el ZIP solo** (`censusZipCounty`: centro del ZIP en TIGERweb y condado de ese punto). Así un ZIP de otro condado (p. ej. 33705 → Pinellas) se descarta como «fuera de condado» en vez de quedar en «Revisar condado». Requiere `USE_CENSUS_GEOCODER=true`; si el Census falla o no conoce el ZIP, sigue yendo a «Revisar condado».
+
+## Imágenes de leads borrados — 2026-11-18
+Al borrarse definitivamente un descartado (5 días en la papelera), `purgarDescartados` borra también sus imágenes de `data/media` (flyers de WhatsApp y adjuntos de correo del OCR), salvo las que todavía use otro lead activo o descartado, una publicación en la bandeja o una fallida (`src/media.js`). `scripts/media-huerfanas.mjs` lista (sin borrar) las imágenes que nadie usa; con `--borrar` las elimina, solo tras revisar la lista.

@@ -171,14 +171,19 @@ export function recuperarLead(id, usuario) {
   });
 }
 
-/** Borra de la papelera los descartados hace más de 5 días. Devuelve sus id (para borrar sus informes). */
-export function purgarPapelera(ahora = Date.now()) {
+/** Borra de la papelera los descartados hace más de 5 días. Devuelve sus id y las imágenes que usaban (para borrar sus informes e imágenes). */
+export function purgarPapeleraDetalle(ahora = Date.now()) {
   return withLeads((data) => {
     const limite = ahora - HORAS_PAPELERA * 36e5;
-    const vencidos = data.papelera.filter((l) => new Date(l.descartado_en) < limite).map((l) => l.id);
-    data.papelera = data.papelera.filter((l) => !vencidos.includes(l.id));
-    return vencidos;
+    const borrados = data.papelera.filter((l) => new Date(l.descartado_en) < limite);
+    data.papelera = data.papelera.filter((l) => !borrados.includes(l));
+    return { ids: borrados.map((l) => l.id), imagenes: borrados.flatMap((l) => l.imagenes_locales || []) };
   });
+}
+
+/** Igual que purgarPapeleraDetalle, solo con los id. */
+export async function purgarPapelera(ahora = Date.now()) {
+  return (await purgarPapeleraDetalle(ahora)).ids;
 }
 
 /** Registra una dirección descartada automáticamente (fuera de condado) sin guardar el lead. */

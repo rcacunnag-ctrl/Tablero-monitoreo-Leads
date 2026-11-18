@@ -971,6 +971,35 @@ test('columna Mensaje: los de MLS con Listing Terms de financiamiento llevan los
   assert.ok(COLUMNS.includes('mensaje_original'));
 });
 
+test('imágenes: se borran con el lead descartado (5 días) solo si nadie más las usa; las huérfanas se listan sin borrarse', async () => {
+  const { config } = await import('../src/config.js');
+  const { imagenesHuerfanas, borrarImagenes } = await import('../src/media.js');
+  await fs.mkdir(config.dirs.media, { recursive: true });
+  const crear = async (n, dias = 0) => { const f = path.join(config.dirs.media, n); await fs.writeFile(f, 'x'.repeat(100)); const t = new Date(Date.now() - dias * 864e5); await fs.utimes(f, t, t); return f; };
+  const existe = (n) => fs.access(path.join(config.dirs.media, n)).then(() => true, () => false);
+  const flyer = await crear('MSG-FLYER.jpg'); const solo = await crear('MSG-SOLO.jpg'); const adj = await crear('email-1111.png');
+  await crear('HUERFANA-VIEJA.jpg', 10); await crear('RECIEN-LLEGADA.jpg', 0);
+  // Dos leads del mismo mensaje comparten el flyer; uno tiene además otra imagen
+  const [a, b] = await leadsMod.addLeads([
+    { estado: ESTADOS.nuevo, direccion: '1 Img St', clave_direccion: '1 IMG ST', imagenes_locales: [flyer, solo] },
+    { estado: ESTADOS.nuevo, direccion: '2 Img St', clave_direccion: '2 IMG ST', imagenes_locales: ['/app/data/media/MSG-FLYER.jpg', adj] },
+  ]);
+  await actions.descartar(a.id);
+  await actions.purgarDescartados(Date.now() + 121 * 36e5);
+  assert.equal(await existe('MSG-SOLO.jpg'), false); // solo la usaba el lead borrado
+  assert.equal(await existe('MSG-FLYER.jpg'), true); // el otro lead del mismo mensaje todavía la usa
+  // Un lead descartado que aún está en la papelera sigue protegiendo sus imágenes
+  await actions.descartar(b.id);
+  assert.deepEqual(await borrarImagenes([flyer, adj]), { borradas: 0, bytes: 0 });
+  await actions.purgarDescartados(Date.now() + 240 * 36e5);
+  assert.equal(await existe('MSG-FLYER.jpg'), false); assert.equal(await existe('email-1111.png'), false);
+  // Huérfanas: solo las de más de un día y sin lead; listar no borra nada
+  assert.deepEqual((await imagenesHuerfanas()).map((x) => x.nombre), ['HUERFANA-VIEJA.jpg']);
+  assert.equal(await existe('HUERFANA-VIEJA.jpg'), true);
+  // Solo borra imágenes de la carpeta de media, no rutas con carpetas ni otros tipos de archivo
+  assert.deepEqual(await borrarImagenes(['../leads.json', '/etc/passwd', 'notas.txt']), { borradas: 0, bytes: 0 });
+});
+
 test('mercado: cola por dirección, validación del reporte y reintentos', async () => {
   const { config } = await import('../src/config.js');
   const m = await import('../src/mercado.js');

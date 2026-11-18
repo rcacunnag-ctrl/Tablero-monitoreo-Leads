@@ -3,12 +3,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config, DATA_DIR } from './config.js';
-import { ESTADOS, listLeads, updateLead, discardLead, recuperarLead, purgarPapelera } from './leads.js';
+import { ESTADOS, listLeads, updateLead, discardLead, recuperarLead, purgarPapeleraDetalle } from './leads.js';
 import { resolveManualAddress, computeAlerta, evaluarCriterios, pctArv } from './pipeline.js';
 import { lanzarCompAnalysis, setJobState } from './tier1.js';
 import { parseMoney } from './extract.js';
 import { exportOutputs } from './sink.js';
 import { borrarInformes } from './informes.js';
+import { borrarImagenes } from './media.js';
 import { encolar } from './notify.js';
 import { lanzarTier2, setTier2State, reintentarTier2, COMPARABLES, FASES } from './tier2.js';
 
@@ -69,10 +70,12 @@ export async function descartarVencidos(ahora = Date.now(), { forzar = false } =
   return vencidos.length;
 }
 
-/** Borra los descartados de hace más de 5 días y sus informes. */
+/** Borra los descartados de hace más de 5 días, sus informes y sus imágenes (si ningún otro lead las usa). */
 export async function purgarDescartados(ahora = Date.now()) {
-  const ids = await purgarPapelera(ahora);
+  const { ids, imagenes } = await purgarPapeleraDetalle(ahora);
   for (const id of ids) await borrarInformes(id);
+  const img = await borrarImagenes(imagenes);
+  if (img.borradas) console.log(`Imágenes borradas con los descartados: ${img.borradas} (${(img.bytes / 1e6).toFixed(1)} MB)`);
   return ids.length;
 }
 
