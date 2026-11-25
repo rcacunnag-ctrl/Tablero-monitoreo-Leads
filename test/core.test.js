@@ -1124,3 +1124,15 @@ test('correo: varias cuentas por .env y "solo nuevos" en la primera lectura', as
   assert.equal((await sondear()).correos, 1); // ahora sí llega el nuevo de b@b.com
   assert.deepEqual(await calles(), ['10 Viejo Ave', '40 Nuevo Ave']);
 });
+
+test('ZIP tras una coma sin "FL" ("Riviera Bch, 33404") y precio con coma: el ZIP se conserva y el precio no se confunde con un ZIP', async () => {
+  const r = await ex('1149 W 34th St Riviera Bch, 33404\nVacant Lot Lot Size: 0.1150 Acres\n$79,000');
+  assert.equal(r.listings.length, 1);
+  const l = r.listings[0];
+  assert.equal(l.zip, '33404');
+  assert.equal(l.city, 'Riviera Beach'); // "Bch" = Beach
+  assert.equal(l.price_usd, 79000);
+  assert.equal(l.property_type, 'land');
+  const p = await ex('500 Main St Lake Worth\nAsking $33,404 cash');
+  assert.equal(p.listings[0].zip, null); // "$33,404" es un precio, no un ZIP
+});

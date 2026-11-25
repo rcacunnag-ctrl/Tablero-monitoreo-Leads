@@ -196,7 +196,7 @@ function findLinks(text) {
 
 /** Busca una ciudad conocida dentro del texto (la primera que aparece). */
 export function findCity(text, { allowRisky = false } = {}) {
-  const t = ` ${text.toLowerCase().replace(/[.’']/g, '').replace(/\bft\s/g, 'fort ').replace(/\bst\s(?=lucie)/g, 'saint ').replace(/[^a-záéíóúñ0-9]+/g, ' ')} `;
+  const t = ` ${text.toLowerCase().replace(/[.’']/g, '').replace(/\bft\s/g, 'fort ').replace(/\bst\s(?=lucie)/g, 'saint ').replace(/\bbch\b/g, 'beach').replace(/[^a-záéíóúñ0-9]+/g, ' ')} `;
   let best = null;
   for (const c of KNOWN_CITIES) {
     if (!allowRisky && RISKY_CITY_WORDS.has(c)) continue;
@@ -209,7 +209,8 @@ export function findCity(text, { allowRisky = false } = {}) {
 function findZip(text, { strict = true } = {}) {
   for (const m of text.matchAll(ZIP_RE)) {
     const before = text.slice(Math.max(0, m.index - 12), m.index);
-    if (/[$,.\d]\s*$/.test(before) && !/\b(fl|florida)\W*$/i.test(before)) continue; // parte de un precio o número
+    // parte de un precio o número ("$79,000", "1,33404"); una coma tras una palabra ("Riviera Bch, 33404") no lo es
+    if (/(?:\$|\d[,.])\s*$/.test(before) && !/\b(fl|florida)\W*$/i.test(before)) continue;
     if (!strict || /\b(fl|florida)\W*$/i.test(before) || countyFromZip(m[1]).county) return m[1];
   }
   return null;
